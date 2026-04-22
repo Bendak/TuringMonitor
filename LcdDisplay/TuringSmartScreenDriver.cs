@@ -29,13 +29,13 @@ public class TuringSmartScreenDriver : IDisposable
             ReadTimeout = 1000,
             WriteTimeout = 1000,
             DtrEnable = true,
-            RtsEnable = true
+            RtsEnable = true,
+            Handshake = Handshake.None
         };
         _serialPort.Open();
+        _serialPort.DiscardInBuffer();
     }
 
-    // Protocolo Rev A (USBMonitor 3.5)
-    // 6 bytes: [X >> 2] [(X&3)<<6 + Y>>4] [(Y&15)<<4 + EX>>6] [(EX&63)<<2 + EY>>8] [EY&255] [CMD]
     private void SendCommand(byte cmd, int x = 0, int y = 0, int ex = 0, int ey = 0)
     {
         if (_serialPort?.IsOpen != true) return;
@@ -51,26 +51,41 @@ public class TuringSmartScreenDriver : IDisposable
         _serialPort.Write(buffer, 0, buffer.Length);
     }
 
-    public void Reset() 
+    public void Reset() => SendCommand(101);
+    public void Clear() => SendCommand(102);
+
+    public void DisplayBitmap(int x0, int y0, int x1, int y1, byte[] rgb565Data)
     {
-        SendCommand(101); // Command.RESET
-        // O Python faz um close e espera 5 segundos porque o hardware reseta o USB
-        _serialPort?.Close();
-        Thread.Sleep(5000);
-        Open();
+        SendCommand(197, x0, y0, x1, y1);
+        
+        // Envia em chunks para estabilidade
+        int chunkSize = 4096;
+        for (int i = 0; i < rgb565Data.Length; i += chunkSize)
+        {
+            int length = Math.Min(chunkSize, rgb565Data.Length - i);
+            _serialPort?.Write(rgb565Data, i, length);
+        }
     }
 
-    public void Clear() => SendCommand(102); // Command.CLEAR
-    
+    public void SetOrientation(byte orientation, int width, int height)
+    {
+        if (_serialPort?.IsOpen != true) return;
+
+        var buffer = new byte[16];
+        buffer[5] = 121;
+        buffer[6] = (byte)(orientation + 100);
+        buffer[7] = (byte)(width >> 8);
+        buffer[8] = (byte)(width & 255);
+        buffer[9] = (byte)(height >> 8);
+        buffer[10] = (byte)(height & 255);
+        _serialPort.Write(buffer, 0, buffer.Length);
+    }
+
     public void SetBrightness(int level) 
     {
-        // 0 (brilhante) a 255 (escuro)
         int levelAbsolute = 255 - (int)((level / 100.0) * 255);
-        SendCommand(110, levelAbsolute); // Command.SET_BRIGHTNESS
+        SendCommand(110, levelAbsolute);
     }
-
-    public void ScreenOn() => SendCommand(109);
-    public void ScreenOff() => SendCommand(108);
 
     public void Dispose()
     {

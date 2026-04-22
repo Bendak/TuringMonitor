@@ -1,7 +1,7 @@
 {
   "Background": "background.png",
   "FontPath": "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans-Bold.ttf",
-  "DebugMode": true,
+  "DebugMode": false,
   "Latitude": 0.0,
   "Longitude": 0.0,
   "Elements": [
@@ -218,22 +218,23 @@
       "Id": "weather_icon",
       "Type": "Icon",
       "Source": "WeatherIcon",
-      "X": 350,
-      "Y": 270,
-      "Width": 32,
-      "Height": 32
+      "X": 370,
+      "Y": 228,
+      "Width": 72,
+      "Height": 72
     },
     {
       "Id": "weather_temp",
       "Type": "Text",
       "Source": "WeatherTemp",
       "Format": "{0:0}°C",
-      "X": 390,
-      "Y": 280,
-      "Width": 50,
-      "Height": 22,
+      "X": 370,
+      "Y": 284,
+      "Width": 72,
+      "Height": 18,
       "Color": "#ffffff",
-      "FontSize": 14
+      "FontSize": 16,
+      "Alignment": "Center"
     },
     {
       "Id": "location_city",
@@ -251,7 +252,7 @@
       "Type": "Text",
       "Source": "DateTime",
       "Format": "{0:HH:mm:ss}",
-      "X": 210,
+      "X": 212,
       "Y": 272,
       "Width": 100,
       "Height": 18,

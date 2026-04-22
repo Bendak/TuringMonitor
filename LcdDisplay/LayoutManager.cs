@@ -155,11 +155,11 @@ public class LayoutManager
     {
         var iconPath = System.IO.Path.Combine(_iconsPath, $"{iconCode}.png");
         if (System.IO.File.Exists(iconPath)) {
-            using var icon = Image.Load<Rgb24>(iconPath);
+            // CORREÇÃO: Usar Rgba32 para carregar o canal Alpha da transparência
+            using var icon = Image.Load<Rgba32>(iconPath);
             icon.Mutate(x => x.Resize(w, h));
-            ctx.DrawImage(icon, 1f);
+            ctx.DrawImage(icon, 1f); // Mescla o ícone com o fundo recortado
         } else {
-            // PLACEHOLDER: Desenha um círculo se não achar o PNG
             int code = 0; int.TryParse(iconCode, out code);
             var color = code <= 3 ? SixLabors.ImageSharp.Color.Yellow : SixLabors.ImageSharp.Color.DeepSkyBlue;
             ctx.Fill(color, new EllipsePolygon(w/2f, h/2f, Math.Min(w,h)/2f - 2));
@@ -169,7 +169,8 @@ public class LayoutManager
     private void DrawProgressBar(IImageProcessingContext ctx, int w, int h, ThemeElement el, float percent, SixLabors.ImageSharp.Color activeColor, SixLabors.ImageSharp.Color offColor)
     {
         float p = Math.Clamp(percent / 100f, 0, 1);
-        int activeBlocks = (int)(el.Blocks * p);
+        int blocks = el.Blocks > 0 ? el.Blocks : 10;
+        int activeBlocks = (int)(blocks * p);
         float reservedTextWidth = 0;
         Font? font = null;
         if (el.ShowPercentage && _fontFamily.HasValue) {
@@ -177,9 +178,9 @@ public class LayoutManager
             reservedTextWidth = TextMeasurer.MeasureSize("100%", new TextOptions(font)).Width + 5;
         }
         float barWidth = w - reservedTextWidth;
-        float blockWidth = barWidth / el.Blocks;
+        float blockWidth = barWidth / blocks;
         float blockHeight = h - 6;
-        for (int i = 0; i < el.Blocks; i++) {
+        for (int i = 0; i < blocks; i++) {
             var rect = new RectangleF(i * blockWidth + 1, (h - blockHeight) / 2, blockWidth - 2, blockHeight);
             if (i < activeBlocks) ctx.Fill(activeColor, rect);
             else if (offColor != SixLabors.ImageSharp.Color.Transparent) ctx.Fill(offColor, rect);
@@ -194,9 +195,10 @@ public class LayoutManager
     private void DrawArcGauge(IImageProcessingContext ctx, int w, int h, ThemeElement el, float percent, SixLabors.ImageSharp.Color activeColor, SixLabors.ImageSharp.Color offColor)
     {
         float p = Math.Clamp(percent / 100f, 0, 1);
-        int activeBlocks = (int)(el.Blocks * p);
-        float centerX = w / 2f, centerY = h - 5f, radius = Math.Min(w / 2f, h) - 10f, thickness = 10f, startAngle = 180f, totalSweep = 180f, stepAngle = totalSweep / el.Blocks;
-        for (int i = 0; i < el.Blocks; i++) {
+        int blocks = el.Blocks > 0 ? el.Blocks : 10;
+        int activeBlocks = (int)(blocks * p);
+        float centerX = w / 2f, centerY = h - 5f, radius = Math.Min(w / 2f, h) - 10f, thickness = 10f, startAngle = 180f, totalSweep = 180f, stepAngle = totalSweep / blocks;
+        for (int i = 0; i < blocks; i++) {
             float angle = startAngle + (i * stepAngle);
             var section = new ArcLineSegment(new PointF(centerX, centerY), new SizeF(radius, radius), 0, angle + 2, stepAngle - 4);
             var color = i < activeBlocks ? activeColor : offColor;

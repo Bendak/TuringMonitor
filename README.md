@@ -6,6 +6,7 @@
 An ultra-lightweight system monitor for Linux, built with **.NET 10** and **Native AOT**, specifically designed for 3.5" Chinese USB LCD displays (Turing Smart Screen / Revision A).
 
 ## 🚀 Highlights
+
 - **Native AOT:** High-performance native binary with ultra-low memory footprint (< 20MB).
 - **Pro Theme Engine:** Fully customizable JSON-based theme system with real transparency support (Alpha Blending).
 - **Live Reload:** Calibrate your layout in real-time—save the JSON and see changes on the LCD instantly without restarting.
@@ -19,6 +20,7 @@ An ultra-lightweight system monitor for Linux, built with **.NET 10** and **Nati
 The theme file is located at `Assets/Themes/[Name]/theme.json`.
 
 ### Global Configuration
+
 | Field | Description |
 | :--- | :--- |
 | `Background` | Background image file name (480x320). |
@@ -27,12 +29,14 @@ The theme file is located at `Assets/Themes/[Name]/theme.json`.
 | `Latitude` / `Longitude` | Geographical coordinates for weather forecasting. |
 
 ### Element Types
+
 - **`Text`**: Renders formatted strings.
 - **`ProgressBar`**: Segmented progress bar.
 - **`Gauge`**: 180° segmented arc (speedometer style).
 - **`Icon`**: Loads dynamic PNGs from the `Icons/` folder based on sensor data.
 
 ### Element Properties
+
 | Property | Description |
 | :--- | :--- |
 | `Source` | Data source name (see list below). |
@@ -51,6 +55,7 @@ The theme file is located at `Assets/Themes/[Name]/theme.json`.
 ## 📊 Data Sources (Sources)
 
 ### CPU
+
 - `CpuName`: Friendly processor name.
 - `CpuLoad`: Total CPU usage percentage.
 - `CpuTemp`: Real-time temperature (Tctl/Package).
@@ -58,6 +63,7 @@ The theme file is located at `Assets/Themes/[Name]/theme.json`.
 - `CpuPower`: Power consumption in Watts (via RAPL).
 
 ### GPU (NVIDIA)
+
 - `GpuModel`: Short model name (e.g., RTX 4090).
 - `GpuLoad`: Core utilization percentage.
 - `GpuTemp`: GPU temperature.
@@ -66,6 +72,7 @@ The theme file is located at `Assets/Themes/[Name]/theme.json`.
 - `VramPercent`: VRAM usage percentage.
 
 ### Others
+
 - `RamString`: Formatted "Used / Total GB" string.
 - `RamPercent`: RAM usage percentage.
 - `NetInString` / `NetOutString`: Real-time network speed (e.g., "500 Mbps").
@@ -77,9 +84,10 @@ The theme file is located at `Assets/Themes/[Name]/theme.json`.
 
 ## 🏗️ Getting Started
 
-1.  **Permissions:** Grant access to the serial port: `sudo chmod 666 /dev/ttyACM0`
-2.  **Run:** Execute `dotnet run` inside the `LcdDisplay` folder.
-3.  **Production:** Publish as a native binary: `dotnet publish -c Release`
+1. **Permissions:** Grant access to the serial port: `sudo chmod 666 /dev/ttyACM0`
+2. **Run:** Execute `dotnet run` inside the `LcdDisplay` folder.
+3. **Production:** Publish as a native binary: `dotnet publish -c Release`
 
 ## ⚖️ License
+
 This project is licensed under the **MIT License**.

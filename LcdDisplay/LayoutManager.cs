@@ -2,6 +2,7 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing;
 using SixLabors.Fonts;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -10,15 +11,22 @@ namespace LcdDisplay;
 
 public class ThemeElement
 {
-    public string Id { get; set; } = "";
+    public string Id { get; set; } = "unnamed";
+    public string Type { get; set; } = "Text"; // Text, ProgressBar, Gauge, Icon
     public string Source { get; set; } = "";
     public string Format { get; set; } = "{0}";
-    public int X { get; set; }
-    public int Y { get; set; }
-    public int Width { get; set; }
-    public int Height { get; set; }
+    public double Multiplier { get; set; } = 1.0;
+    public int X { get; set; } = 0;
+    public int Y { get; set; } = 0;
+    public int Width { get; set; } = 50;
+    public int Height { get; set; } = 20;
     public string Color { get; set; } = "#ffffff";
+    public string? OffColor { get; set; } = null;
+    public string? BackgroundColor { get; set; } = null;
+    public string Alignment { get; set; } = "Left"; 
     public int FontSize { get; set; } = 12;
+    public int Blocks { get; set; } = 10;
+    public bool ShowPercentage { get; set; } = false;
 }
 
 public class ThemeConfig
@@ -26,10 +34,11 @@ public class ThemeConfig
     public string Background { get; set; } = "background.png";
     public string FontPath { get; set; } = "";
     public bool DebugMode { get; set; }
+    public double Latitude { get; set; }
+    public double Longitude { get; set; }
     public List<ThemeElement> Elements { get; set; } = new();
 }
 
-// Otimização para Native AOT: Contexto de Serialização JSON
 [JsonSourceGenerationOptions(WriteIndented = true)]
 [JsonSerializable(typeof(ThemeConfig))]
 internal partial class ThemeJsonContext : JsonSerializerContext { }
@@ -37,93 +46,168 @@ internal partial class ThemeJsonContext : JsonSerializerContext { }
 public class LayoutManager
 {
     private readonly TuringSmartScreenDriver _lcd;
-    private readonly string _assetsPath;
+    private readonly string _themesRoot;
+    private readonly string _themeName;
+    private string _themePath => System.IO.Path.Combine(_themesRoot, _themeName);
+    private string _jsonPath => System.IO.Path.Combine(_themePath, "theme.json");
+    private string _iconsPath => System.IO.Path.Combine(_themePath, "Icons");
+    
     private Image<Rgb24>? _backgroundImage;
-    private Font? _font;
+    private FontFamily? _fontFamily;
+    private DateTime _lastJsonWrite;
     public ThemeConfig? Theme { get; private set; }
 
-    public LayoutManager(TuringSmartScreenDriver lcd, string assetsPath = "Assets")
+    public LayoutManager(TuringSmartScreenDriver lcd, string themesRoot, string themeName = "Default")
     {
         _lcd = lcd;
-        _assetsPath = assetsPath;
-        LoadTheme();
+        _themesRoot = themesRoot;
+        _themeName = themeName;
+        ReloadIfNeeded(force: true);
     }
 
-    private void LoadTheme()
+    private SixLabors.ImageSharp.Color ParseColorSafe(string? hex, SixLabors.ImageSharp.Color fallback)
+    {
+        if (string.IsNullOrEmpty(hex) || hex == "transparent") return SixLabors.ImageSharp.Color.Transparent;
+        try { return SixLabors.ImageSharp.Color.ParseHex(hex.StartsWith("#") ? hex : "#" + hex); } catch { return fallback; }
+    }
+
+    public void ReloadIfNeeded(bool force = false)
     {
         try {
-            var themePath = Path.Combine(_assetsPath, "theme.json");
-            if (File.Exists(themePath))
-            {
-                var json = File.ReadAllText(themePath);
-                // Usa o contexto otimizado para AOT
-                Theme = JsonSerializer.Deserialize(json, ThemeJsonContext.Default.ThemeConfig);
-            }
+            if (!System.IO.File.Exists(_jsonPath)) return;
+            var currentWrite = System.IO.File.GetLastWriteTime(_jsonPath);
+            if (!force && currentWrite <= _lastJsonWrite) return;
 
-            if (Theme != null)
-            {
-                if (File.Exists(Theme.FontPath))
-                {
-                    var collection = new FontCollection();
-                    var family = collection.Add(Theme.FontPath);
-                    _font = family.CreateFont(14, FontStyle.Bold);
-                }
+            Console.WriteLine($"Reloading theme: {_themeName}...");
+            var json = System.IO.File.ReadAllText(_jsonPath);
+            Theme = JsonSerializer.Deserialize(json, ThemeJsonContext.Default.ThemeConfig);
+            _lastJsonWrite = currentWrite;
 
-                var bgPath = Path.Combine(_assetsPath, Theme.Background);
-                if (File.Exists(bgPath)) {
+            if (Theme != null) {
+                if (System.IO.File.Exists(Theme.FontPath)) _fontFamily = new FontCollection().Add(Theme.FontPath);
+                var bgPath = System.IO.Path.Combine(_themePath, Theme.Background);
+                if (System.IO.File.Exists(bgPath)) {
+                    _backgroundImage?.Dispose();
                     _backgroundImage = Image.Load<Rgb24>(bgPath);
                     _backgroundImage.Mutate(x => x.Resize(480, 320));
+                    DrawBackground();
                 }
             }
-        } catch (Exception ex) {
-            Console.WriteLine($"Error loading theme: {ex.Message}");
-        }
+        } catch { }
     }
 
     public void DrawBackground()
     {
         if (_backgroundImage == null) return;
-        var pixels = ConvertToRgb565(_backgroundImage);
-        _lcd.DisplayBitmap(0, 0, 479, 319, pixels);
+        _lcd.DisplayBitmap(0, 0, 479, 319, ConvertToRgb565(_backgroundImage));
     }
 
     public void DrawElement(ThemeElement el, object value)
     {
         if (_backgroundImage == null) return;
 
-        using var canvas = _backgroundImage.Clone(ctx => 
-            ctx.Crop(new Rectangle(el.X, el.Y, el.Width, el.Height))
-        );
+        try {
+            int x = Math.Clamp(el.X, 0, 479);
+            int y = Math.Clamp(el.Y, 0, 319);
+            int w = Math.Clamp(el.Width, 2, 480 - x);
+            int h = Math.Clamp(el.Height, 2, 320 - y);
 
-        canvas.Mutate(ctx => {
-            if (Theme?.DebugMode == true)
-            {
-                ctx.Draw(SixLabors.ImageSharp.Color.Red, 1f, new RectangleF(0, 0, el.Width - 1, el.Height - 1));
-            }
+            using var canvas = _backgroundImage.Clone(ctx => ctx.Crop(new Rectangle(x, y, w, h)));
 
-            if (_font != null) {
-                var text = string.Format(el.Format, value);
-                var color = SixLabors.ImageSharp.Color.ParseHex(el.Color);
-                ctx.DrawText(text, _font, color, new PointF(2, 2));
-            }
-        });
+            canvas.Mutate(ctx => {
+                var bgColor = ParseColorSafe(el.BackgroundColor, SixLabors.ImageSharp.Color.Transparent);
+                if (bgColor != SixLabors.ImageSharp.Color.Transparent) ctx.Clear(bgColor);
 
-        var pixels = ConvertToRgb565(canvas);
-        _lcd.DisplayBitmap(el.X, el.Y, el.X + el.Width - 1, el.Y + el.Height - 1, pixels);
+                if (Theme?.DebugMode == true)
+                    ctx.Draw(SixLabors.ImageSharp.Color.Red, 1f, new RectangleF(0, 0, w - 1, h - 1));
+
+                if (el.Type == "Icon") {
+                    DrawIcon(ctx, w, h, value.ToString() ?? "0");
+                }
+                else if (el.Type == "ProgressBar" && value is float fVal) {
+                    var activeColor = ParseColorSafe(el.Color, SixLabors.ImageSharp.Color.White);
+                    var offColor = ParseColorSafe(el.OffColor, SixLabors.ImageSharp.Color.Transparent);
+                    DrawProgressBar(ctx, w, h, el, (float)(fVal * el.Multiplier), activeColor, offColor);
+                }
+                else if (el.Type == "Gauge" && value is float gVal) {
+                    var activeColor = ParseColorSafe(el.Color, SixLabors.ImageSharp.Color.White);
+                    var offColor = ParseColorSafe(el.OffColor, SixLabors.ImageSharp.Color.Transparent);
+                    DrawArcGauge(ctx, w, h, el, (float)(gVal * el.Multiplier), activeColor, offColor);
+                }
+                else if (_fontFamily.HasValue) {
+                    var font = _fontFamily.Value.CreateFont(el.FontSize > 0 ? el.FontSize : 12, FontStyle.Bold);
+                    var text = "err";
+                    try { text = string.Format(el.Format, value is float v ? v * el.Multiplier : value); } catch { text = value.ToString() ?? ""; }
+                    var color = ParseColorSafe(el.Color, SixLabors.ImageSharp.Color.White);
+                    var textSize = TextMeasurer.MeasureSize(text, new TextOptions(font));
+                    float tx = 2;
+                    if (el.Alignment == "Center") tx = (w - textSize.Width) / 2;
+                    else if (el.Alignment == "Right") tx = w - textSize.Width - 2;
+                    ctx.DrawText(text, font, color, new PointF(tx, (h - textSize.Height) / 2));
+                }
+            });
+
+            _lcd.DisplayBitmap(x, y, x + w - 1, y + h - 1, ConvertToRgb565(canvas));
+        } catch { }
+    }
+
+    private void DrawIcon(IImageProcessingContext ctx, int w, int h, string iconCode)
+    {
+        var iconPath = System.IO.Path.Combine(_iconsPath, $"{iconCode}.png");
+        if (System.IO.File.Exists(iconPath)) {
+            using var icon = Image.Load<Rgb24>(iconPath);
+            icon.Mutate(x => x.Resize(w, h));
+            ctx.DrawImage(icon, 1f);
+        }
+    }
+
+    private void DrawProgressBar(IImageProcessingContext ctx, int w, int h, ThemeElement el, float percent, SixLabors.ImageSharp.Color activeColor, SixLabors.ImageSharp.Color offColor)
+    {
+        float p = Math.Clamp(percent / 100f, 0, 1);
+        int activeBlocks = (int)(el.Blocks * p);
+        float reservedTextWidth = 0;
+        Font? font = null;
+        if (el.ShowPercentage && _fontFamily.HasValue) {
+            font = _fontFamily.Value.CreateFont(el.FontSize, FontStyle.Bold);
+            reservedTextWidth = TextMeasurer.MeasureSize("100%", new TextOptions(font)).Width + 5;
+        }
+        float barWidth = w - reservedTextWidth;
+        float blockWidth = barWidth / el.Blocks;
+        float blockHeight = h - 6;
+        for (int i = 0; i < el.Blocks; i++) {
+            var rect = new RectangleF(i * blockWidth + 1, (h - blockHeight) / 2, blockWidth - 2, blockHeight);
+            if (i < activeBlocks) ctx.Fill(activeColor, rect);
+            else if (offColor != SixLabors.ImageSharp.Color.Transparent) ctx.Fill(offColor, rect);
+        }
+        if (el.ShowPercentage && font != null) {
+            var text = $"{percent:0}%";
+            var size = TextMeasurer.MeasureSize(text, new TextOptions(font));
+            ctx.DrawText(text, font, activeColor, new PointF(w - size.Width - 2, (h - size.Height) / 2));
+        }
+    }
+
+    private void DrawArcGauge(IImageProcessingContext ctx, int w, int h, ThemeElement el, float percent, SixLabors.ImageSharp.Color activeColor, SixLabors.ImageSharp.Color offColor)
+    {
+        float p = Math.Clamp(percent / 100f, 0, 1);
+        int activeBlocks = (int)(el.Blocks * p);
+        float centerX = w / 2f, centerY = h - 5f, radius = Math.Min(w / 2f, h) - 10f, thickness = 10f, startAngle = 180f, totalSweep = 180f, stepAngle = totalSweep / el.Blocks;
+        for (int i = 0; i < el.Blocks; i++) {
+            float angle = startAngle + (i * stepAngle);
+            var section = new ArcLineSegment(new PointF(centerX, centerY), new SizeF(radius, radius), 0, angle + 2, stepAngle - 4);
+            var color = i < activeBlocks ? activeColor : offColor;
+            if (color != SixLabors.ImageSharp.Color.Transparent) ctx.Draw(color, thickness, new SixLabors.ImageSharp.Drawing.Path(section));
+        }
     }
 
     private byte[] ConvertToRgb565(Image<Rgb24> image)
     {
         var data = new byte[image.Width * image.Height * 2];
         int idx = 0;
-        for (int y = 0; y < image.Height; y++)
-        {
-            for (int x = 0; x < image.Width; x++)
-            {
+        for (int y = 0; y < image.Height; y++) {
+            for (int x = 0; x < image.Width; x++) {
                 var pixel = image[x, y];
                 ushort rgb565 = (ushort)(((pixel.R & 0xF8) << 8) | ((pixel.G & 0xFC) << 3) | (pixel.B >> 3));
-                data[idx++] = (byte)(rgb565 & 0xFF);
-                data[idx++] = (byte)(rgb565 >> 8);
+                data[idx++] = (byte)(rgb565 & 0xFF); data[idx++] = (byte)(rgb565 >> 8);
             }
         }
         return data;

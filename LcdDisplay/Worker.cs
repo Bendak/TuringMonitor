@@ -17,11 +17,13 @@ public class Worker : BackgroundService
 {
     private readonly ILogger<Worker> _logger;
     private readonly Channel<TelemetrySnapshot> _channel;
+    private readonly TuringSmartScreenDriver _lcd;
 
     public Worker(ILogger<Worker> logger)
     {
         _logger = logger;
-        // Unbounded channel for simplicity, or Bounded(1) to drop older if slow
+        _lcd = new TuringSmartScreenDriver();
+        // Bounded channel to drop older snapshots if consumer is slower than producer
         _channel = Channel.CreateBounded<TelemetrySnapshot>(new BoundedChannelOptions(1) 
         { 
             FullMode = BoundedChannelFullMode.DropOldest 
@@ -30,15 +32,29 @@ public class Worker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Start Consumer task
+        _logger.LogInformation("LcdDisplay Service Starting on port {Port}...", _lcd.PortName);
+
+        try
+        {
+            _lcd.Open();
+            _lcd.Reset();
+            _lcd.Clear();
+            _logger.LogInformation("LCD hardware initialized successfully.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to initialize LCD hardware on port {Port}. Verify permissions or cable.", _lcd.PortName);
+        }
+
+        // Start Consumer task in a separate thread/task
         var consumerTask = RunConsumerAsync(stoppingToken);
         
         // Start Producer logic
-        _logger.LogInformation("LcdDisplay Service Started.");
+        _logger.LogInformation("Producer loop started.");
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            // Simulate polling telemetry (Phase 1: Mock data)
+            // Simulate polling telemetry (Phase 2: Mock data)
             var snapshot = new TelemetrySnapshot(
                 CpuName: "Ryzen 9 7950X3D",
                 CpuTemp: Random.Shared.Next(40, 75),
@@ -50,7 +66,7 @@ public class Worker : BackgroundService
                 Timestamp: DateTime.Now
             );
 
-            _logger.LogDebug("Producer: Generating new snapshot...");
+            _logger.LogDebug("Producer: Sending snapshot to channel...");
             await _channel.Writer.WriteAsync(snapshot, stoppingToken);
 
             await Task.Delay(2000, stoppingToken);
@@ -64,18 +80,31 @@ public class Worker : BackgroundService
     {
         TelemetrySnapshot? lastSnapshot = null;
 
-        await foreach (var snapshot in _channel.Reader.ReadAllAsync(stoppingToken))
+        try
         {
-            _logger.LogInformation("Consumer: Received update at {Time}. CPU Load: {Load}%", snapshot.Timestamp, snapshot.CpuLoad);
-
-            if (lastSnapshot != null)
+            await foreach (var snapshot in _channel.Reader.ReadAllAsync(stoppingToken))
             {
-                // Here we will implement Delta Logic in Phase 5
-                var delta = snapshot.CpuLoad - lastSnapshot.CpuLoad;
-                _logger.LogDebug("Delta detected: {Delta}%", delta);
-            }
+                _logger.LogInformation("Consumer: Received update. CPU Load: {Load}%", snapshot.CpuLoad);
 
-            lastSnapshot = snapshot;
+                try
+                {
+                    // Visual Ping: Update brightness according to CPU Load (just for Phase 2 validation)
+                    byte brightness = (byte)Math.Clamp(snapshot.CpuLoad, 10, 100);
+                    _lcd.SetBrightness(brightness);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning("Failed to send command to LCD: {Msg}", ex.Message);
+                }
+
+                lastSnapshot = snapshot;
+            }
+        }
+        catch (OperationCanceledException) { }
+        finally
+        {
+            _logger.LogInformation("Consumer task stopping...");
+            _lcd.Dispose();
         }
     }
 }

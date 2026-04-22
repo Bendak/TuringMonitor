@@ -2,8 +2,8 @@
   "Background": "background.png",
   "FontPath": "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans-Bold.ttf",
   "DebugMode": true,
-  "Latitude": -23.5505,
-  "Longitude": -46.6333,
+  "Latitude": 0.0,
+  "Longitude": 0.0,
   "Elements": [
     {
       "Id": "cpu_name",
@@ -250,27 +250,25 @@
       "Id": "clock",
       "Type": "Text",
       "Source": "DateTime",
-      "Format": "{0:HH:mm}",
-      "X": 220,
-      "Y": 275,
-      "Width": 80,
-      "Height": 22,
+      "Format": "{0:HH:mm:ss}",
+      "X": 210,
+      "Y": 272,
+      "Width": 100,
+      "Height": 18,
       "Color": "#00ffff",
-      "FontSize": 16,
-      "Alignment": "Center"
+      "FontSize": 16
     },
     {
       "Id": "date",
       "Type": "Text",
       "Source": "DateTime",
       "Format": "{0:dd MMM yyyy}",
-      "X": 210,
-      "Y": 300,
-      "Width": 100,
-      "Height": 18,
-      "Color": "#aaaaaa",
-      "FontSize": 10,
-      "Alignment": "Center"
+      "X": 216,
+      "Y": 294,
+      "Width": 94,
+      "Height": 14,
+      "Color": "#ffffff",
+      "FontSize": 12
     }
   ]
 }

@@ -7,9 +7,8 @@ using System.Text.Json.Serialization;
 
 namespace LcdDisplay;
 
-public record WeatherStats(float Temp, int WmoCode);
+public record WeatherStats(float Temp, string IconId);
 
-// Contexto de Serialização para o Clima (Native AOT)
 [JsonSerializable(typeof(JsonElement))]
 internal partial class WeatherJsonContext : JsonSerializerContext { }
 
@@ -50,20 +49,39 @@ public class LinuxTelemetry
                 return _lastWeather;
 
             var url = $"https://api.open-meteo.com/v1/forecast?latitude={lat.ToString(CultureInfo.InvariantCulture)}&longitude={lon.ToString(CultureInfo.InvariantCulture)}&current_weather=true";
-            
-            // Versão compatível com AOT
             var response = await _http.GetFromJsonAsync(url, WeatherJsonContext.Default.JsonElement);
             
             if (response.TryGetProperty("current_weather", out var current)) {
-                _lastWeather = new WeatherStats(
-                    current.GetProperty("temperature").GetSingle(),
-                    current.GetProperty("weathercode").GetInt32()
-                );
+                float temp = current.GetProperty("temperature").GetSingle();
+                int wmo = current.GetProperty("weathercode").GetInt32();
+                int isDay = current.GetProperty("is_day").GetInt32();
+                
+                string iconId = MapWmoToOwm(wmo, isDay == 1);
+                
+                _lastWeather = new WeatherStats(temp, iconId);
                 _lastWeatherUpdate = DateTime.Now;
                 return _lastWeather;
             }
         } catch { }
-        return _lastWeather ?? new WeatherStats(0, 0);
+        return _lastWeather ?? new WeatherStats(0, "01d");
+    }
+
+    private string MapWmoToOwm(int wmo, bool isDay)
+    {
+        string id = wmo switch {
+            0 => "01",
+            1 or 2 => "02",
+            3 => "03",
+            45 or 48 => "50",
+            51 or 53 or 55 or 56 or 57 => "09",
+            61 or 63 or 65 or 66 or 67 => "10",
+            71 or 73 or 75 or 77 => "13",
+            80 or 81 or 82 => "09",
+            85 or 86 => "13",
+            95 or 96 or 99 => "11",
+            _ => "01"
+        };
+        return id + (isDay ? "d" : "n");
     }
 
     public (float InMbps, float OutMbps) GetNetStats()

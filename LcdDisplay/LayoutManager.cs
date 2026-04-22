@@ -12,7 +12,7 @@ namespace LcdDisplay;
 public class ThemeElement
 {
     public string Id { get; set; } = "unnamed";
-    public string Type { get; set; } = "Text"; // Text, ProgressBar, Gauge, Icon
+    public string Type { get; set; } = "Text"; 
     public string Source { get; set; } = "";
     public string Format { get; set; } = "{0}";
     public double Multiplier { get; set; } = 1.0;
@@ -122,7 +122,7 @@ public class LayoutManager
                     ctx.Draw(SixLabors.ImageSharp.Color.Red, 1f, new RectangleF(0, 0, w - 1, h - 1));
 
                 if (el.Type == "Icon") {
-                    DrawIcon(ctx, w, h, value.ToString() ?? "0");
+                    DrawIconWithPlaceholder(ctx, w, h, value.ToString() ?? "0");
                 }
                 else if (el.Type == "ProgressBar" && value is float fVal) {
                     var activeColor = ParseColorSafe(el.Color, SixLabors.ImageSharp.Color.White);
@@ -139,11 +139,11 @@ public class LayoutManager
                     var text = "err";
                     try { text = string.Format(el.Format, value is float v ? v * el.Multiplier : value); } catch { text = value.ToString() ?? ""; }
                     var color = ParseColorSafe(el.Color, SixLabors.ImageSharp.Color.White);
-                    var textSize = TextMeasurer.MeasureSize(text, new TextOptions(font));
+                    var size = TextMeasurer.MeasureSize(text, new TextOptions(font));
                     float tx = 2;
-                    if (el.Alignment == "Center") tx = (w - textSize.Width) / 2;
-                    else if (el.Alignment == "Right") tx = w - textSize.Width - 2;
-                    ctx.DrawText(text, font, color, new PointF(tx, (h - textSize.Height) / 2));
+                    if (el.Alignment == "Center") tx = (w - size.Width) / 2;
+                    else if (el.Alignment == "Right") tx = w - size.Width - 2;
+                    ctx.DrawText(text, font, color, new PointF(tx, (h - size.Height) / 2));
                 }
             });
 
@@ -151,13 +151,18 @@ public class LayoutManager
         } catch { }
     }
 
-    private void DrawIcon(IImageProcessingContext ctx, int w, int h, string iconCode)
+    private void DrawIconWithPlaceholder(IImageProcessingContext ctx, int w, int h, string iconCode)
     {
         var iconPath = System.IO.Path.Combine(_iconsPath, $"{iconCode}.png");
         if (System.IO.File.Exists(iconPath)) {
             using var icon = Image.Load<Rgb24>(iconPath);
             icon.Mutate(x => x.Resize(w, h));
             ctx.DrawImage(icon, 1f);
+        } else {
+            // PLACEHOLDER: Desenha um círculo se não achar o PNG
+            int code = 0; int.TryParse(iconCode, out code);
+            var color = code <= 3 ? SixLabors.ImageSharp.Color.Yellow : SixLabors.ImageSharp.Color.DeepSkyBlue;
+            ctx.Fill(color, new EllipsePolygon(w/2f, h/2f, Math.Min(w,h)/2f - 2));
         }
     }
 

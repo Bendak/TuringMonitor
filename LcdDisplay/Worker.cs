@@ -27,7 +27,7 @@ public record TelemetrySnapshot(
     string NetInString,
     string NetOutString,
     float WeatherTemp,
-    int WeatherIcon,
+    string WeatherIcon, // Alterado para string para suportar "01d", etc
     DateTime Timestamp
 );
 
@@ -51,7 +51,7 @@ public class Worker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("LcdDisplay ENGINE v11 (Weather Support) Starting...");
+        _logger.LogInformation("LcdDisplay ENGINE v11.2 (Pro Weather) Starting...");
 
         try {
             _lcd.Open();
@@ -66,12 +66,9 @@ public class Worker : BackgroundService
         while (!stoppingToken.IsCancellationRequested)
         {
             _layout.ReloadIfNeeded();
-            
             var ram = _telemetry.GetRamUsage();
             var gpu = _telemetry.GetGpuStats();
             var net = _telemetry.GetNetStats();
-
-            // Busca clima (Manual Lat/Lon do Tema)
             var weather = await _telemetry.GetWeatherAsync(_layout.Theme?.Latitude ?? 0, _layout.Theme?.Longitude ?? 0);
 
             var snapshot = new TelemetrySnapshot(
@@ -94,7 +91,7 @@ public class Worker : BackgroundService
                 $"{net.InMbps:F0} Mbps",
                 $"{net.OutMbps:F0} Mbps",
                 weather.Temp,
-                weather.WmoCode,
+                weather.IconId, // CORRIGIDO: Agora usa IconId ("01d", "01n", etc)
                 DateTime.Now
             );
 
@@ -138,11 +135,10 @@ public class Worker : BackgroundService
                     };
                     if (value == null) value = el.Source;
 
-                    bool isDynamic = el.Source == "Time" || el.Source == "DateTime" || el.Source == "WeatherIcon";
+                    bool isDynamic = el.Source == "DateTime" || el.Source == "WeatherIcon";
                     bool hasChanged = (_layout.Theme.DebugMode) || lastSnapshot == null || isDynamic || el.Source switch {
                         "CpuLoad" => Math.Abs(snapshot.CpuLoad - lastSnapshot.CpuLoad) > 0.5f,
                         "RamPercent" => Math.Abs(snapshot.RamPercent - lastSnapshot.RamPercent) > 0.1f,
-                        "WeatherTemp" => Math.Abs(snapshot.WeatherTemp - lastSnapshot.WeatherTemp) > 0.1f,
                         _ => true
                     };
 

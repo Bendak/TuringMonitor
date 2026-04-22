@@ -1,0 +1,40 @@
+{
+  "Background": "background.png",
+  "FontPath": "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans-Bold.ttf",
+  "DebugMode": true,
+  "Elements": [
+    {
+      "Id": "cpu_load",
+      "Source": "CpuLoad",
+      "Format": "{0:0}%",
+      "X": 195,
+      "Y": 108,
+      "Width": 65,
+      "Height": 22,
+      "Color": "#00ffff",
+      "FontSize": 14
+    },
+    {
+      "Id": "cpu_temp",
+      "Source": "CpuTemp",
+      "Format": "{0:0}°C",
+      "X": 65,
+      "Y": 48,
+      "Width": 65,
+      "Height": 22,
+      "Color": "#ffaa00",
+      "FontSize": 14
+    },
+    {
+      "Id": "ram_used",
+      "Source": "RamUsedGb",
+      "Format": "{0:F1}GB",
+      "X": 75,
+      "Y": 185,
+      "Width": 80,
+      "Height": 22,
+      "Color": "#00ffff",
+      "FontSize": 14
+    }
+  ]
+}

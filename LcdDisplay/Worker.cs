@@ -3,11 +3,8 @@ using System.Threading.Channels;
 namespace LcdDisplay;
 
 public record TelemetrySnapshot(
-    string CpuName,
-    float CpuTemp,
     float CpuLoad,
-    float GpuTemp,
-    float GpuLoad,
+    float CpuTemp,
     float RamUsedGb,
     float RamTotalGb,
     DateTime Timestamp
@@ -19,49 +16,48 @@ public class Worker : BackgroundService
     private readonly Channel<TelemetrySnapshot> _channel;
     private readonly TuringSmartScreenDriver _lcd;
     private readonly LayoutManager _layout;
+    private readonly LinuxTelemetry _telemetry;
 
     public Worker(ILogger<Worker> logger)
     {
         _logger = logger;
         _lcd = new TuringSmartScreenDriver();
         _layout = new LayoutManager(_lcd, Path.Combine(AppContext.BaseDirectory, "Assets"));
-        _channel = Channel.CreateBounded<TelemetrySnapshot>(new BoundedChannelOptions(1) 
-        { 
-            FullMode = BoundedChannelFullMode.DropOldest 
-        });
+        _telemetry = new LinuxTelemetry();
+        _channel = Channel.CreateBounded<TelemetrySnapshot>(new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropOldest });
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("LcdDisplay Service Starting on port {Port}...", _lcd.PortName);
+        _logger.LogInformation("LcdDisplay THEME ENGINE Starting...");
 
         try
         {
             _lcd.Open();
-            // Orientação 2 (Landscape conforme teste Python)
             _lcd.SetOrientation(2, 480, 320);
             _lcd.Clear();
             _lcd.SetBrightness(100);
             
-            _logger.LogInformation("Drawing initial background...");
+            _logger.LogInformation("Drawing background from theme...");
             _layout.DrawBackground();
-            
-            _logger.LogInformation("LCD hardware initialized successfully.");
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to initialize LCD hardware.");
-        }
+        catch (Exception ex) { _logger.LogError(ex, "LCD Init fail."); }
 
         var consumerTask = RunConsumerAsync(stoppingToken);
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            var ram = _telemetry.GetRamUsage();
             var snapshot = new TelemetrySnapshot(
-                "Ryzen 9", 50, Random.Shared.Next(5, 95), 50, 50, 16, 32, DateTime.Now
+                _telemetry.GetCpuUsage(),
+                _telemetry.GetCpuTemp(),
+                ram.UsedGb,
+                ram.TotalGb,
+                DateTime.Now
             );
+
             await _channel.Writer.WriteAsync(snapshot, stoppingToken);
-            await Task.Delay(2000, stoppingToken);
+            await Task.Delay(1000, stoppingToken);
         }
 
         _channel.Writer.Complete();
@@ -70,20 +66,46 @@ public class Worker : BackgroundService
 
     private async Task RunConsumerAsync(CancellationToken stoppingToken)
     {
+        TelemetrySnapshot? lastSnapshot = null;
+
         try
         {
             await foreach (var snapshot in _channel.Reader.ReadAllAsync(stoppingToken))
             {
-                _logger.LogInformation("Consumer: Update received. CPU: {Load}%", snapshot.CpuLoad);
-                // Batimento visual: brilho muda levemente com o load para sabermos que está vivo
-                int b = (int)Math.Clamp(snapshot.CpuLoad, 40, 100);
-                _lcd.SetBrightness(b);
+                if (_layout.Theme == null) continue;
+
+                foreach (var el in _layout.Theme.Elements)
+                {
+                    object? value = el.Source switch
+                    {
+                        "CpuLoad" => snapshot.CpuLoad,
+                        "CpuTemp" => snapshot.CpuTemp,
+                        "RamUsedGb" => snapshot.RamUsedGb,
+                        "RamTotalGb" => snapshot.RamTotalGb,
+                        "Time" => snapshot.Timestamp.ToString("HH:mm:ss"),
+                        _ => null
+                    };
+
+                    if (value == null) continue;
+
+                    // Lógica de Delta por Elemento
+                    bool hasChanged = lastSnapshot == null || el.Source switch {
+                        "CpuLoad" => Math.Abs(snapshot.CpuLoad - lastSnapshot.CpuLoad) > 0.5f,
+                        "CpuTemp" => Math.Abs(snapshot.CpuTemp - lastSnapshot.CpuTemp) > 0.5f,
+                        "RamUsedGb" => Math.Abs(snapshot.RamUsedGb - lastSnapshot.RamUsedGb) > 0.1f,
+                        _ => true
+                    };
+
+                    if (hasChanged)
+                    {
+                        _layout.DrawElement(el, value);
+                    }
+                }
+
+                lastSnapshot = snapshot;
             }
         }
         catch (OperationCanceledException) { }
-        finally
-        {
-            _lcd.Dispose();
-        }
+        finally { _lcd.Dispose(); }
     }
 }

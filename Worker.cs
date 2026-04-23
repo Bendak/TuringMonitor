@@ -53,6 +53,7 @@ public class Worker : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("TuringMonitor ENGINE v11.2 (Pro Weather) Starting...");
+        _logger.LogInformation("Detected Serial Port: {Port}", _lcd.PortName);
 
         try {
             _lcd.Open();
@@ -60,7 +61,10 @@ public class Worker : BackgroundService
             _lcd.Clear();
             _lcd.SetBrightness(100);
             _layout.DrawBackground();
-        } catch { }
+            _logger.LogInformation("LCD Initialized successfully.");
+        } catch (Exception ex) {
+            _logger.LogError(ex, "Failed to initialize LCD on port {Port}", _lcd.PortName);
+        }
 
         var consumerTask = RunConsumerAsync(stoppingToken);
 

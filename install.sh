@@ -32,6 +32,7 @@ sudo mkdir -p "$ASSETS_DIR"
 # Copy binary and assets
 echo "📝 Copying binary and assets..."
 sudo cp bin/Release/net10.0/linux-x64/publish/TuringMonitor "$INSTALL_DIR/"
+sudo cp bin/Release/net10.0/linux-x64/publish/*.so "$INSTALL_DIR/" 2>/dev/null || true
 sudo cp appsettings.json "$INSTALL_DIR/"
 sudo cp -r Assets "$INSTALL_DIR/"
 

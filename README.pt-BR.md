@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Language: en-US](https://img.shields.io/badge/Language-en--US-blue.svg)](README.md)
 
-Um monitor de sistema de alta performance para Linux, desenvolvido com **.NET 10** e **Native AOT**, projetado especificamente para telas LCD USB de 3.5" (Turing Smart Screen / Revisão A).
+**Um monitor de sistema de alta performance em .NET 10 para Turing Smart Screens de 3.5" no Linux (Turing Smart Screen / Revisão A). Possui Native AOT para consumo de memória ultra baixo e uma engine de temas JSON totalmente customizável.**
 
 ## 🚀 Principais Características
 
@@ -18,12 +18,14 @@ Um monitor de sistema de alta performance para Linux, desenvolvido com **.NET 10
 ## 🛠️ Instalação Rápida
 
 ### 1. Prerequisitos
+
 - **Nobara Linux / Fedora** (Desenvolvido e testado atualmente no Nobara; outras distros ainda não foram testadas).
 - **.NET 10 SDK** (necessário para o build).
 - Dependências: `libicu`, `libssl`, `libusb`.
 - Uma tela Turing Smart Screen 3.5" (Revisão A).
 
 ### 2. Instalar via Script
+
 Fornecemos um script simples que compila o projeto e configura o daemon do systemd:
 
 ```bash
@@ -32,6 +34,7 @@ chmod +x install.sh
 ```
 
 O script irá:
+
 1. Compilar o binário usando **Native AOT**.
 2. Instalar a aplicação em `/usr/local/bin/TuringMonitor`.
 3. Configurar e iniciar um serviço `systemd` (`turing-monitor.service`).

@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Language: pt-BR](https://img.shields.io/badge/Language-pt--BR-green.svg)](README.pt-BR.md)
 
-A high-performance, ultra-lightweight system monitor for Linux, built with **.NET 10** and **Native AOT**, specifically designed for 3.5" USB LCD displays (Turing Smart Screen / Revision A).
+**A high-performance .NET 10 System Monitor for 3.5" Turing Smart Screens on Linux (Turing Smart Screen / Revision A). Features Native AOT for ultra-low memory footprint and a fully customizable JSON theme engine.**
 
 ![Sample Preview](sample.png)
 
@@ -20,12 +20,14 @@ A high-performance, ultra-lightweight system monitor for Linux, built with **.NE
 ## 🛠️ Quick Installation
 
 ### 1. Prerequisites
+
 - **Nobara Linux / Fedora** (Currently developed and tested on Nobara; other distros are not yet tested).
 - **.NET 10 SDK** (required for building).
 - Dependencies: `libicu`, `libssl`, `libusb`.
 - A 3.5" Turing Smart Screen (Revision A).
 
 ### 2. Install using Script
+
 We provide a simple installation script that builds the project and sets up a systemd daemon:
 
 ```bash
@@ -34,6 +36,7 @@ chmod +x install.sh
 ```
 
 The script will:
+
 1. Build the binary using **Native AOT**.
 2. Install the application to `/usr/local/bin/TuringMonitor`.
 3. Configure and start a `systemd` service (`turing-monitor.service`).
@@ -44,15 +47,19 @@ The script will:
 ## 🎨 Theme Guide
 
 ### Selection
+
 To change the active theme, edit `appsettings.json`:
+
 ```json
 {
   "Theme": "MyCustomTheme"
 }
 ```
+
 Themes are located in `Assets/Themes/`.
 
 ### Creating a Custom Theme
+
 1. Create a new folder in `Assets/Themes/[ThemeName]`.
 2. Add a `background.png` (480x320).
 3. Create a `theme.json` file.
@@ -68,6 +75,7 @@ Themes are located in `Assets/Themes/`.
 | `Latitude` / `Longitude` | Geographical coordinates for weather. |
 
 ### Element Types
+
 - `Text`: Renders formatted strings.
 - `ProgressBar`: Segmented horizontal bar.
 - `Gauge`: 180° segmented arc.

@@ -17,7 +17,8 @@ Um monitor de sistema de alta performance para Linux, desenvolvido com **.NET 10
 
 ## 🛠️ Instalação Rápida
 
-### 1. Pré-requisitos
+### 1. Prerequisitos
+- **Nobara Linux / Fedora** (Desenvolvido e testado atualmente no Nobara; outras distros ainda não foram testadas).
 - **.NET 10 SDK** (necessário para o build).
 - Dependências: `libicu`, `libssl`, `libusb`.
 - Uma tela Turing Smart Screen 3.5" (Revisão A).

@@ -20,6 +20,7 @@ A high-performance, ultra-lightweight system monitor for Linux, built with **.NE
 ## 🛠️ Quick Installation
 
 ### 1. Prerequisites
+- **Nobara Linux / Fedora** (Currently developed and tested on Nobara; other distros are not yet tested).
 - **.NET 10 SDK** (required for building).
 - Dependencies: `libicu`, `libssl`, `libusb`.
 - A 3.5" Turing Smart Screen (Revision A).

@@ -1,82 +1,43 @@
-# System Monitor LCD Daemon (.NET 10)
+# TuringMonitor (Turing Smart Screen Linux)
 
-Um monitor de sistema ultra-leve para Linux, desenvolvido em **.NET 10** com **Native AOT**, otimizado para displays LCD chineses de 3.5" (Turing Smart Screen / Revision A).
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Language: en-US](https://img.shields.io/badge/Language-en--US-blue.svg)](README.md)
 
-## 🚀 Destaques
-- **Native AOT:** Binário nativo de alta performance com consumo de memória < 20MB.
-- **Pro Theme Engine:** Sistema de temas via JSON com suporte a transparência real (Alpha Blending).
-- **Live Reload:** Altere o layout no JSON e veja as mudanças no LCD instantaneamente sem reiniciar o serviço.
-- **Delta Updates:** Envia apenas os pixels modificados para o hardware, garantindo fluidez.
-- **Telemetria Completa:** Coleta profunda de dados de CPU, GPU (NVIDIA), RAM, Rede e Clima.
+Um monitor de sistema de alta performance para Linux, desenvolvido com **.NET 10** e **Native AOT**, projetado especificamente para telas LCD USB de 3.5" (Turing Smart Screen / Revisão A).
 
----
+## 🚀 Principais Características
 
-## 🎨 Guia do theme.json
-
-O arquivo de tema reside em `Assets/Themes/[Nome]/theme.json`.
-
-### Configurações Globais
-| Campo | Descrição |
-| :--- | :--- |
-| `Background` | Nome do arquivo de imagem de fundo (480x320). |
-| `FontPath` | Caminho para a fonte `.ttf` no sistema. |
-| `DebugMode` | `true` desenha bordas vermelhas nos elementos para calibração. |
-| `Latitude` / `Longitude` | Coordenadas para a previsão do tempo. |
-
-### Tipos de Elementos
-- **`Text`**: Renderiza strings formatadas.
-- **`ProgressBar`**: Barra de progresso segmentada.
-- **`Gauge`**: Arco (velocímetro) segmentado de 180°.
-- **`Icon`**: Carrega PNGs dinâmicos da pasta `Icons/` baseados no sensor.
-
-### Propriedades dos Elementos
-| Propriedade | Descrição |
-| :--- | :--- |
-| `Source` | Fonte do dado (veja a lista abaixo). |
-| `X`, `Y` | Posição no display (0-479, 0-319). |
-| `Width`, `Height` | Dimensões da área de atualização. |
-| `Color` | Cor do elemento (Hex: `#00ffff` ou nome: `cyan`). |
-| `OffColor` | Cor dos blocos inativos (ou `transparent`). |
-| `Alignment` | Alinhamento do texto (`Left`, `Center`, `Right`). |
-| `Multiplier` | Multiplicador para o valor bruto (ex: `0.001` para converter MHz em GHz). |
-| `Format` | Máscara de formatação C# (ex: `{0:F1} GHz` ou `{0:HH:mm}`). |
-| `Blocks` | Número de segmentos para barras e gauges. |
-| `ShowPercentage` | (ProgressBar) Exibe o texto `%` alinhado à direita. |
+- **Native AOT:** Binário nativo com pegada de memória ultra baixa (< 20MB).
+- **Engine de Temas:** Sistema de layout baseado em JSON totalmente customizável com suporte a transparência real.
+- **Live Reload:** Calibre seu layout em tempo real—salve o JSON e veja as mudanças no LCD instantaneamente.
+- **Delta Updates:** Renderização inteligente que envia apenas pixels modificados para o hardware.
+- **Telemetria Completa:** Dados em tempo real para CPU, GPU (NVIDIA), RAM, Rede e Clima.
 
 ---
 
-## 📊 Fontes de Dados (Sources)
+## 🛠️ Instalação Rápida
 
-### CPU
-- `CpuName`: Nome do processador (filtrado).
-- `CpuLoad`: Uso total em %.
-- `CpuTemp`: Temperatura real (Tctl/Package).
-- `CpuClock`: Frequência máxima atual (MHz).
-- `CpuPower`: Consumo em Watts.
+### 1. Pré-requisitos
+- **.NET 10 SDK** (necessário para o build).
+- Dependências: `libicu`, `libssl`, `libusb`.
+- Uma tela Turing Smart Screen 3.5" (Revisão A).
 
-### GPU (NVIDIA)
-- `GpuModel`: Nome curto (ex: RTX 4090).
-- `GpuLoad`: Uso do núcleo em %.
-- `GpuTemp`: Temperatura da GPU.
-- `GpuPower`: Consumo em Watts.
-- `VramString`: Texto formatado "Used / Total GB".
-- `VramPercent`: Porcentagem de uso da VRAM.
+### 2. Instalar via Script
+Fornecemos um script simples que compila o projeto e configura o daemon do systemd:
 
-### Outros
-- `RamString`: Texto formatado "Used / Total GB".
-- `RamPercent`: Porcentagem de uso da memória RAM.
-- `NetInString` / `NetOutString`: Velocidade de Rede (ex: "500 Mbps").
-- `WeatherTemp`: Temperatura externa atual.
-- `WeatherIcon`: ID do ícone de clima (Dia/Noite).
-- `DateTime`: Objeto de tempo completo para formatos de hora e data.
+```bash
+chmod +x install.sh
+./install.sh
+```
+
+O script irá:
+1. Compilar o binário usando **Native AOT**.
+2. Instalar a aplicação em `/usr/local/bin/TuringMonitor`.
+3. Configurar e iniciar um serviço `systemd` (`turing-monitor.service`).
+4. Adicionar seu usuário ao grupo `dialout` para acesso à porta serial.
 
 ---
-
-## 🏗️ Como Rodar
-
-1.  **Permissões:** `sudo chmod 666 /dev/ttyACM0`
-2.  **Execução:** `dotnet run` dentro da pasta `LcdDisplay`.
-3.  **Produção (AOT):** `dotnet publish -c Release`
 
 ## ⚖️ Licença
-Este projeto está sob a licença **MIT**.
+
+Este projeto está licenciado sob a **Licença MIT**. Criado por **bendak**.

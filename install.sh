@@ -29,6 +29,12 @@ sudo mkdir -p "$INSTALL_DIR"
 sudo mkdir -p "$CONFIG_DIR"
 sudo mkdir -p "$ASSETS_DIR"
 
+# Stop service if exists and is running
+if systemctl is-active --quiet turing-monitor.service; then
+    echo "🛑 Stopping existing service for update..."
+    sudo systemctl stop turing-monitor.service
+fi
+
 # Copy binary and assets
 echo "📝 Copying binary and assets..."
 sudo cp bin/Release/net10.0/linux-x64/publish/TuringMonitor "$INSTALL_DIR/"
@@ -61,12 +67,13 @@ echo "🛡️ Setting up permissions..."
 sudo usermod -a -G dialout $USER
 sudo chmod +x "$INSTALL_DIR/TuringMonitor"
 
-# Reload and enable service
-echo "🔄 Enabling and starting service..."
+# Reload, enable and restart service
+echo "🔄 Reloading and restarting service..."
 sudo systemctl daemon-reload
 sudo systemctl enable turing-monitor.service
+sudo systemctl restart turing-monitor.service
 
-echo "✅ Installation complete!"
+echo "✅ Installation and update complete!"
 echo "💡 You can start the service with: sudo systemctl start turing-monitor"
 echo "💡 To view logs: journalctl -u turing-monitor -f"
 echo "⚠️ Note: You might need to logout and login again for the 'dialout' group changes to take effect."

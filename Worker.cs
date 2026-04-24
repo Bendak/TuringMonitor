@@ -57,8 +57,9 @@ public class Worker : BackgroundService
 
         try {
             _lcd.Open();
-            _lcd.SetOrientation(2, 480, 320);
+            _lcd.Reset();
             _lcd.Clear();
+            _lcd.SetOrientation(2, 480, 320);
             _lcd.SetBrightness(100);
             _layout.DrawBackground();
             _logger.LogInformation("LCD Initialized successfully.");
@@ -106,6 +107,19 @@ public class Worker : BackgroundService
 
         _channel.Writer.Complete();
         await consumerTask;
+    }
+
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("TuringMonitor is stopping. Turning off LCD...");
+        try 
+        {
+            _lcd.SetBrightness(0);
+            _lcd.Clear();
+        } 
+        catch { }
+
+        await base.StopAsync(cancellationToken);
     }
 
     private async Task RunConsumerAsync(CancellationToken stoppingToken)

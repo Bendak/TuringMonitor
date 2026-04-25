@@ -454,6 +454,9 @@ Temporary Items
 .apdisk
 
 # content below from: https://github.com/github/gitignore/blob/main/Global/Windows.gitignore
+# Local configuration
+Assets/Themes/Default/theme.json
+
 # Windows thumbnail cache files
 Thumbs.db
 ehthumbs.db

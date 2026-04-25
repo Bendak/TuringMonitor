@@ -74,18 +74,23 @@ public class LayoutManager
     public void ReloadIfNeeded(bool force = false)
     {
         try {
-            string actualJsonPath = _jsonPath;
-            if (!System.IO.File.Exists(actualJsonPath))
+            if (!System.IO.File.Exists(_jsonPath))
             {
-                actualJsonPath = System.IO.Path.Combine(_themePath, "theme.template.json");
-                if (!System.IO.File.Exists(actualJsonPath)) return;
+                string templatePath = System.IO.Path.Combine(_themePath, "theme.template.json");
+                if (System.IO.File.Exists(templatePath))
+                {
+                    Console.WriteLine($"Theme file missing. Creating default from template: {_jsonPath}");
+                    System.IO.File.Copy(templatePath, _jsonPath);
+                    Console.WriteLine("IMPORTANT: Please edit theme.json with your coordinates for accurate weather data.");
+                }
+                else return;
             }
 
-            var currentWrite = System.IO.File.GetLastWriteTime(actualJsonPath);
+            var currentWrite = System.IO.File.GetLastWriteTime(_jsonPath);
             if (!force && currentWrite <= _lastJsonWrite) return;
 
-            Console.WriteLine($"Reloading theme: {_themeName}...");
-            var json = System.IO.File.ReadAllText(actualJsonPath);
+            Console.WriteLine($"Loading theme: {_themeName}...");
+            var json = System.IO.File.ReadAllText(_jsonPath);
             Theme = JsonSerializer.Deserialize(json, ThemeJsonContext.Default.ThemeConfig);
             _lastJsonWrite = currentWrite;
 

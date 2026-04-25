@@ -455,7 +455,7 @@ Temporary Items
 
 # content below from: https://github.com/github/gitignore/blob/main/Global/Windows.gitignore
 # Local configuration
-Assets/Themes/Default/theme.json
+Assets/Themes//theme.json
 
 # Windows thumbnail cache files
 Thumbs.db

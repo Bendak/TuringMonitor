@@ -74,12 +74,18 @@ public class LayoutManager
     public void ReloadIfNeeded(bool force = false)
     {
         try {
-            if (!System.IO.File.Exists(_jsonPath)) return;
-            var currentWrite = System.IO.File.GetLastWriteTime(_jsonPath);
+            string actualJsonPath = _jsonPath;
+            if (!System.IO.File.Exists(actualJsonPath))
+            {
+                actualJsonPath = System.IO.Path.Combine(_themePath, "theme.template.json");
+                if (!System.IO.File.Exists(actualJsonPath)) return;
+            }
+
+            var currentWrite = System.IO.File.GetLastWriteTime(actualJsonPath);
             if (!force && currentWrite <= _lastJsonWrite) return;
 
             Console.WriteLine($"Reloading theme: {_themeName}...");
-            var json = System.IO.File.ReadAllText(_jsonPath);
+            var json = System.IO.File.ReadAllText(actualJsonPath);
             Theme = JsonSerializer.Deserialize(json, ThemeJsonContext.Default.ThemeConfig);
             _lastJsonWrite = currentWrite;
 

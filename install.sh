@@ -21,7 +21,16 @@ fi
 
 # Build the project (Native AOT)
 echo "📦 Building $APP_NAME (Native AOT)..."
+PUBLISH_DIR="bin/Release/net10.0/linux-x64/publish"
 dotnet publish -c Release -r linux-x64 --self-contained true
+
+# Verify build output exists
+if [ ! -f "$PUBLISH_DIR/TuringMonitor" ]; then
+    echo "❌ Error: Build output not found at $PUBLISH_DIR/TuringMonitor"
+    exit 1
+fi
+
+echo "✅ Build successful."
 
 # Create directories
 echo "📂 Creating installation directories..."
@@ -35,10 +44,15 @@ if systemctl is-active --quiet turing-monitor.service; then
     sudo systemctl stop turing-monitor.service
 fi
 
-# Copy binary and assets
+# Clean install dir for idempotency (safe guard against empty/wrong dir)
+if [ -d "$INSTALL_DIR" ] && [ -n "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]; then
+    echo "🧹 Cleaning previous installation in $INSTALL_DIR..."
+    sudo rm -rf "$INSTALL_DIR"/*
+fi
+
+# Copy binary and assets (copy entire publish output for robust native lib handling)
 echo "📝 Copying binary and assets..."
-sudo cp bin/Release/net10.0/linux-x64/publish/TuringMonitor "$INSTALL_DIR/"
-sudo cp bin/Release/net10.0/linux-x64/publish/*.so "$INSTALL_DIR/" 2>/dev/null || true
+sudo cp -r "$PUBLISH_DIR"/* "$INSTALL_DIR/"
 sudo cp appsettings.json "$INSTALL_DIR/"
 sudo cp -r Assets "$INSTALL_DIR/"
 
@@ -64,7 +78,7 @@ EOF
 
 # Fix permissions
 echo "🛡️ Setting up permissions..."
-sudo usermod -a -G dialout $USER
+sudo usermod -a -G dialout "${SUDO_USER:-$USER}"
 sudo chmod +x "$INSTALL_DIR/TuringMonitor"
 
 # Reload, enable and restart service

@@ -3,6 +3,15 @@ using System.Diagnostics;
 
 namespace TuringMonitor;
 
+public record struct Rect(int X, int Y, int Width, int Height)
+{
+    public bool IntersectsWith(Rect other)
+    {
+        return X < other.X + other.Width && X + Width > other.X &&
+               Y < other.Y + other.Height && Y + Height > other.Y;
+    }
+}
+
 public record TelemetrySnapshot(
     string CpuName,
     float CpuLoad,
@@ -108,6 +117,8 @@ public class Worker : BackgroundService
                 );
 
                 await _channel.Writer.WriteAsync(snapshot, stoppingToken);
+                _logger.LogDebug("Snapshot produced: CPU={CpuLoad:F1}% RAM={RamPercent:F1}% GPU={GpuLoad:F1}%",
+                    snapshot.CpuLoad, snapshot.RamPercent, snapshot.GpuLoad);
             }
             catch (OperationCanceledException) { throw; }
             catch (Exception ex) {
@@ -153,9 +164,27 @@ public class Worker : BackgroundService
                 lock (_layout) {
                     theme = _layout.Theme;
                 }
-                if (theme == null) continue;
+                if (theme == null) {
+                    _logger.LogWarning("Consumer: Theme is null, skipping snapshot");
+                    continue;
+                }
+                if (theme.Elements.Count == 0) {
+                    _logger.LogWarning("Consumer: Theme has 0 elements, skipping snapshot");
+                    continue;
+                }
 
+                _logger.LogDebug("Consumer: drawing {Count} elements", theme.Elements.Count);
                 var elements = theme.Elements;
+
+                bool forceRedraw = false;
+                if (++_forceRedrawCounter >= ForceRedrawIntervalSec) {
+                    _forceRedrawCounter = 0;
+                    forceRedraw = true;
+                }
+
+                var drawnRegions = new List<Rect>();
+                var toDraw = new List<(ThemeElement el, object? value)>();
+
                 foreach (var el in elements) {
                     object? value = el.Source switch {
                         "CpuName" => snapshot.CpuName,
@@ -182,17 +211,32 @@ public class Worker : BackgroundService
                     };
                     if (value == null) value = el.Source;
 
-                    bool isDynamic = el.Source == "DateTime" || el.Source == "WeatherIcon";
-                    bool forceRedraw = false;
-                    if (++_forceRedrawCounter >= ForceRedrawIntervalSec) {
-                        _forceRedrawCounter = 0;
-                        forceRedraw = true;
-                    }
-
+                    bool isDynamic = el.Source == "DateTime";
                     bool hasChanged = theme.DebugMode || lastSnapshot == null || isDynamic || forceRedraw || HasChanged(el.Source, snapshot, lastSnapshot);
 
-                    if (hasChanged) _layout.DrawElement(el, value);
+                    var rect = new Rect(
+                        Math.Clamp(el.X, 0, 479),
+                        Math.Clamp(el.Y, 0, 319),
+                        Math.Clamp(el.Width, 2, 480 - Math.Clamp(el.X, 0, 479)),
+                        Math.Clamp(el.Height, 2, 320 - Math.Clamp(el.Y, 0, 319)));
+
+                    if (hasChanged) {
+                        toDraw.Add((el, value));
+                        drawnRegions.Add(rect);
+                    }
+                    else {
+                        foreach (var drawn in drawnRegions) {
+                            if (rect.IntersectsWith(drawn)) {
+                                toDraw.Add((el, value));
+                                break;
+                            }
+                        }
+                    }
                 }
+
+                foreach (var (el, value) in toDraw)
+                    _layout.DrawElement(el, value);
+
                 lastSnapshot = snapshot;
             }
         }

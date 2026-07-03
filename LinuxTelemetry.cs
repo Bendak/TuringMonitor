@@ -28,6 +28,7 @@ public class LinuxTelemetry : ITelemetry
     private readonly HttpClient _http;
     private WeatherStats? _lastWeather;
     private DateTime _lastWeatherUpdate = DateTime.MinValue;
+    private volatile bool _weatherFetching;
 
     private DateTime _lastGpuStatsTime = DateTime.MinValue;
     private (float Load, float Temp, float Power, float VramUsed, float VramTotal) _lastGpuStats;
@@ -39,7 +40,7 @@ public class LinuxTelemetry : ITelemetry
     public LinuxTelemetry(ILogger<LinuxTelemetry> logger, HttpClient? http = null)
     {
         _logger = logger;
-        _http = http ?? new HttpClient();
+        _http = http ?? new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
 
         FindCpuTempPath();
         FindCpuPowerPath();
@@ -50,29 +51,46 @@ public class LinuxTelemetry : ITelemetry
         GpuModel = GetGpuShortName(GpuName);
     }
 
-    public async Task<WeatherStats> GetWeatherAsync(double lat, double lon)
+    public Task<WeatherStats> GetWeatherAsync(double lat, double lon)
+    {
+        var now = DateTime.Now;
+        if (_lastWeather != null && now - _lastWeatherUpdate < TimeSpan.FromMinutes(30))
+            return Task.FromResult(_lastWeather);
+        if (_lastWeather == null && now - _lastWeatherUpdate < TimeSpan.FromMinutes(5))
+            return Task.FromResult(new WeatherStats(0, "01d"));
+
+        if (_weatherFetching)
+            return Task.FromResult(_lastWeather ?? new WeatherStats(0, "01d"));
+
+        _weatherFetching = true;
+        _ = FetchWeatherAsync(lat, lon);
+        return Task.FromResult(_lastWeather ?? new WeatherStats(0, "01d"));
+    }
+
+    private async Task FetchWeatherAsync(double lat, double lon)
     {
         try {
-            if (DateTime.Now - _lastWeatherUpdate < TimeSpan.FromMinutes(15) && _lastWeather != null)
-                return _lastWeather;
-
-            var url = $"https://api.open-meteo.com/v1/forecast?latitude={lat.ToString(CultureInfo.InvariantCulture)}&longitude={lon.ToString(CultureInfo.InvariantCulture)}&current_weather=true";
+            var url = $"https://api.open-meteo.com/v1/forecast?latitude={lat.ToString(CultureInfo.InvariantCulture)}&longitude={lon.ToString(CultureInfo.InvariantCulture)}&current=temperature_2m,weather_code,is_day";
             var response = await _http.GetFromJsonAsync(url, WeatherJsonContext.Default.JsonElement);
 
-            if (response.ValueKind != JsonValueKind.Undefined && response.TryGetProperty("current_weather", out var current)) {
-                float temp = current.GetProperty("temperature").GetSingle();
-                int wmo = current.GetProperty("weathercode").GetInt32();
+            if (response.ValueKind != JsonValueKind.Undefined && response.TryGetProperty("current", out var current)) {
+                float temp = current.GetProperty("temperature_2m").GetSingle();
+                int wmo = current.GetProperty("weather_code").GetInt32();
                 int isDay = current.GetProperty("is_day").GetInt32();
 
                 string iconId = MapWmoToOwm(wmo, isDay == 1);
 
                 _lastWeather = new WeatherStats(temp, iconId);
                 _lastWeatherUpdate = DateTime.Now;
-                return _lastWeather;
             }
         }
-        catch (Exception ex) { _logger.LogWarning(ex, "Failed to fetch weather data"); }
-        return _lastWeather ?? new WeatherStats(0, "01d");
+        catch (Exception ex) {
+            _logger.LogDebug(ex, "Failed to fetch weather data; will retry in 5 min");
+            _lastWeatherUpdate = DateTime.Now;
+        }
+        finally {
+            _weatherFetching = false;
+        }
     }
 
     private string MapWmoToOwm(int wmo, bool isDay)
@@ -118,7 +136,10 @@ public class LinuxTelemetry : ITelemetry
         try {
             var psi = new ProcessStartInfo("nvidia-smi", "--query-gpu=name --format=csv,noheader") { RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true };
             using var proc = Process.Start(psi);
-            if (proc != null) return proc.StandardOutput.ReadToEnd().Trim();
+            if (proc != null) {
+                if (!proc.WaitForExit(5000)) { try { proc.Kill(); } catch { } _logger.LogWarning("nvidia-smi (name) timed out"); return "NVIDIA GPU"; }
+                return proc.StandardOutput.ReadToEnd().Trim();
+            }
         }
         catch (Exception ex) { _logger.LogDebug(ex, "nvidia-smi not available for GPU name"); }
         return "NVIDIA GPU";
@@ -135,6 +156,7 @@ public class LinuxTelemetry : ITelemetry
             var psi = new ProcessStartInfo("nvidia-smi", "--query-gpu=utilization.gpu,temperature.gpu,power.draw,memory.used,memory.total --format=csv,noheader,nounits") { RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true };
             using var proc = Process.Start(psi);
             if (proc != null) {
+                if (!proc.WaitForExit(5000)) { try { proc.Kill(); } catch { } _logger.LogWarning("nvidia-smi (stats) timed out"); return (0, 0, 0, 0, 0); }
                 var output = proc.StandardOutput.ReadToEnd().Trim();
                 var parts = output.Split(',');
                 if (parts.Length >= 5) {

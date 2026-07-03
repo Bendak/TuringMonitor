@@ -12,8 +12,11 @@
 - **Native AOT:** High-performance native binary with ultra-low memory footprint (< 20MB).
 - **Theme Engine:** Fully customizable JSON-based layout system with real transparency support.
 - **Live Reload:** Calibrate your layout in real-time—save the JSON and see changes on the LCD instantly.
-- **Delta Updates:** Intelligent rendering that sends only modified pixels to the hardware for high responsiveness.
+- **Delta Updates:** Intelligent rendering that sends only modified pixels to the hardware for high responsiveness. Overlap-aware redraw ensures dependent elements are refreshed correctly.
 - **Full Telemetry:** Real-time data for CPU, GPU (NVIDIA), RAM, Network, and Weather.
+- **Auto-Reconnect:** Automatic serial port reconnection with exponential backoff and port re-detection. The LCD recovers on its own after USB disconnects/reconnects.
+- **Robust Error Handling:** All failures are logged with appropriate severity (no silent exceptions). The service keeps running even if sensors or the LCD are unavailable.
+- **Non-Blocking Weather:** Weather data is fetched in the background (every 30 min) and never stalls the telemetry loop. Falls back gracefully if the API is unreachable.
 
 ---
 

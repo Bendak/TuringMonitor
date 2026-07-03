@@ -10,8 +10,11 @@
 - **Native AOT:** Binário nativo com pegada de memória ultra baixa (< 20MB).
 - **Engine de Temas:** Sistema de layout baseado em JSON totalmente customizável com suporte a transparência real.
 - **Live Reload:** Calibre seu layout em tempo real—salve o JSON e veja as mudanças no LCD instantaneamente.
-- **Delta Updates:** Renderização inteligente que envia apenas pixels modificados para o hardware.
+- **Delta Updates:** Renderização inteligente que envia apenas pixels modificados para o hardware. Redesenho ciente de sobreposições garante que elementos dependentes sejam atualizados corretamente.
 - **Telemetria Completa:** Dados em tempo real para CPU, GPU (NVIDIA), RAM, Rede e Clima.
+- **Reconexão Automática:** Reconexão automática da porta serial com backoff exponencial e re-detecção de porta. O LCD se recupera sozinho após desconexão/reconexão do USB.
+- **Tratamento de Erros Robusto:** Todas as falhas são logadas com severidade apropriada (sem exceções silenciosas). O serviço continua rodando mesmo se sensores ou o LCD estiverem indisponíveis.
+- **Weather Não-Bloqueante:** Dados de clima são buscados em background (a cada 30 min) e nunca travam o loop de telemetria. Fallback gracioso se a API estiver indisponível.
 
 ---
 

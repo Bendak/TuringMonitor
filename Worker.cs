@@ -87,11 +87,12 @@ public class Worker : BackgroundService
         while (!stoppingToken.IsCancellationRequested)
         {
             try {
-                _layout.ReloadIfNeeded();
-                var theme = _layout.Theme;
-                if (theme != null) {
-                    var resolvedKey = _options.Value.OpenWeatherApiKey ?? theme.OpenWeatherApiKey;
-                    if (_telemetry is LinuxTelemetry lt) lt.ConfigureWeather(theme.WeatherApi, resolvedKey);
+                if (_layout.ReloadIfNeeded()) {
+                    var theme = _layout.Theme;
+                    if (theme != null && _telemetry is LinuxTelemetry lt) {
+                        var resolvedKey = _options.Value.OpenWeatherApiKey ?? theme.OpenWeatherApiKey;
+                        lt.ConfigureWeather(theme.WeatherApi, resolvedKey);
+                    }
                 }
                 var ram = _telemetry.GetRamUsage();
                 var gpu = _telemetry.GetGpuStats();

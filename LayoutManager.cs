@@ -84,8 +84,7 @@ public class LayoutManager : ILayoutManager
         if (string.IsNullOrEmpty(hex) || hex == "transparent") return SixLabors.ImageSharp.Color.Transparent;
         try { return SixLabors.ImageSharp.Color.ParseHex(hex.StartsWith("#") ? hex : "#" + hex); } catch { return fallback; }
     }
-
-    public void ReloadIfNeeded(bool force = false)
+    public bool ReloadIfNeeded(bool force = false)
     {
         ThemeConfig? newTheme = null;
         Image<Rgb24>? newBg = null;
@@ -103,11 +102,11 @@ public class LayoutManager : ILayoutManager
                     System.IO.File.Copy(templatePath, _jsonPath);
                     _logger.LogInformation("IMPORTANT: Please edit theme.json with your coordinates for accurate weather data.");
                 }
-                else return;
+                else return false;
             }
 
             var currentWrite = System.IO.File.GetLastWriteTime(_jsonPath);
-            if (!force && currentWrite <= _lastJsonWrite) return;
+            if (!force && currentWrite <= _lastJsonWrite) return false;
 
             _logger.LogInformation("Loading theme: {Theme}...", _themeName);
             var json = System.IO.File.ReadAllText(_jsonPath);
@@ -127,10 +126,10 @@ public class LayoutManager : ILayoutManager
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to reload theme {Theme}", _themeName);
-            return;
+            return false;
         }
 
-        if (!shouldUpdate) return;
+        if (!shouldUpdate) return false;
 
         lock (_themeLock)
         {
@@ -148,7 +147,9 @@ public class LayoutManager : ILayoutManager
                 _logger.LogInformation("Weather icons source: {Source}", source);
             }
         }
+
         DrawBackground();
+        return true;
     }
 
     public void DrawBackground()

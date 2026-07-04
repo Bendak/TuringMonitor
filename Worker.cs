@@ -52,6 +52,7 @@ public class Worker : BackgroundService
 
     private const int ForceRedrawIntervalSec = 30;
     private int _forceRedrawCounter;
+    private bool _weatherConfigured;
 
     public Worker(ILogger<Worker> logger, IDisplay lcd, ILayoutManager layout, ITelemetry telemetry, IOptions<TuringMonitorOptions> options)
     {
@@ -87,11 +88,12 @@ public class Worker : BackgroundService
         while (!stoppingToken.IsCancellationRequested)
         {
             try {
-                if (_layout.ReloadIfNeeded()) {
+                if (_layout.ReloadIfNeeded() || !_weatherConfigured) {
                     var theme = _layout.Theme;
                     if (theme != null && _telemetry is LinuxTelemetry lt) {
                         var resolvedKey = _options.Value.OpenWeatherApiKey ?? theme.OpenWeatherApiKey;
                         lt.ConfigureWeather(theme.WeatherApi, resolvedKey);
+                        _weatherConfigured = true;
                     }
                 }
                 var ram = _telemetry.GetRamUsage();

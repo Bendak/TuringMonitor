@@ -77,7 +77,7 @@ Themes are located in `Assets/Themes/`.
 | `DebugMode` | If `true`, draws red bounding boxes around elements. |
 | `Latitude` / `Longitude` | Geographical coordinates for weather. |
 | `WeatherApi` | Weather data provider. Default `openmeteo` (keyless). Optional: `openweather` or `openweathermap` (alias) — requires an API key. |
-| `WeatherIconsSource` | Source for weather icons. Default `local` (uses `Icons/{icon}.png` from theme). Optional: `online` — downloads OWM icons to `IconCache/` on first use. Local icons always take precedence and are never overwritten. |
+| `WeatherIconsSource` | Source for weather icons. Default `local` (uses `Icons/{icon}.png` from theme). Optional: `online` — downloads OWM icons to `IconCache/` on first use; uses `Icons/` only as fallback if the download fails. |
 | `OpenWeatherApiKey` | API key for OpenWeather when `WeatherApi=openweather`. Recommended to put the key in `appsettings.json` (`OpenWeatherApiKey`) instead — it has priority over `theme.json`. See [Weather Providers](#weather-providers). |
 
 ### Element Types
@@ -122,7 +122,7 @@ TuringMonitor supports two weather data providers, selectable per theme via `Wea
 - If `WeatherApi` is an unknown value → logs `ERROR`, uses `openmeteo`.
 - Open-Meteo (`openmeteo`, the default) keeps the existing behavior unchanged.
 
-**Icons**: weather icon codes are native OpenWeather codes (`01d`, `04n`, etc.). When `WeatherIconsSource=online`, icons are downloaded once to `Assets/Themes/[Theme]/IconCache/{icon}.png` and reused from cache. A local icon in `Assets/Themes/[Theme]/Icons/{icon}.png` always takes precedence over the online download and is never overwritten. If the download fails, the local icon is used as fallback; if neither exists, a geometric placeholder is drawn.
+**Icons**: weather icon codes are native OpenWeather codes (`01d`, `04n`, etc.). When `WeatherIconsSource=online`, icons are downloaded once to `Assets/Themes/[Theme]/IconCache/{icon}.png` and reused from cache. If a cached icon already exists it is used directly. If the download fails, the icon in `Assets/Themes/[Theme]/Icons/{icon}.png` is used as fallback; if neither exists, a geometric placeholder is drawn. In `local` mode (default), only `Icons/{icon}.png` is used (current behavior).
 
 ---
 

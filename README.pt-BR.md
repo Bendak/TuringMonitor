@@ -75,7 +75,7 @@ Os temas ficam em `Assets/Themes/`.
 | `DebugMode` | Se `true`, desenha caixas vermelhas ao redor dos elementos. |
 | `Latitude` / `Longitude` | Coordenadas geográficas para o clima. |
 | `WeatherApi` | Provedor de dados de clima. Padrão `openmeteo` (sem key). Opcional: `openweather` ou `openweathermap` (alias) — requer API key. |
-| `WeatherIconsSource` | Origem dos ícones de clima. Padrão `local` (usa `Icons/{icon}.png` do tema). Opcional: `online` — baixa ícones OWM para `IconCache/` no primeiro uso. Ícones locais sempre têm prioridade e nunca são sobrescritos. |
+| `WeatherIconsSource` | Origem dos ícones de clima. Padrão `local` (usa `Icons/{icon}.png` do tema). Opcional: `online` — baixa ícones OWM para `IconCache/` no primeiro uso; usa `Icons/` apenas como fallback se o download falhar. |
 | `OpenWeatherApiKey` | API key para OpenWeather quando `WeatherApi=openweather`. Recomendado colocar a key em `appsettings.json` (`OpenWeatherApiKey`) — ela tem prioridade sobre `theme.json`. Veja [Provedores de Clima](#provedores-de-clima). |
 
 ### Tipos de Elemento
@@ -120,7 +120,7 @@ O TuringMonitor suporta dois provedores de dados de clima, selecionáveis por te
 - Se `WeatherApi` for um valor desconhecido → loga `ERROR`, usa `openmeteo`.
 - Open-Meteo (`openmeteo`, o padrão) mantém o comportamento atual sem mudanças.
 
-**Ícones**: os códigos de ícone de clima são nativos do OpenWeather (`01d`, `04n`, etc.). Quando `WeatherIconsSource=online`, os ícones são baixados uma vez para `Assets/Themes/[Tema]/IconCache/{icon}.png` e reusados do cache. Um ícone local em `Assets/Themes/[Tema]/Icons/{icon}.png` sempre tem precedência sobre o download online e nunca é sobrescrito. Se o download falhar, o ícone local é usado como fallback; se nenhum existir, um placeholder geométrico é desenhado.
+**Ícones**: os códigos de ícone de clima são nativos do OpenWeather (`01d`, `04n`, etc.). Quando `WeatherIconsSource=online`, os ícones são baixados uma vez para `Assets/Themes/[Tema]/IconCache/{icon}.png` e reusados do cache. Se o ícone já existe no cache, é usado diretamente. Se o download falhar, o ícone em `Assets/Themes/[Tema]/Icons/{icon}.png` é usado como fallback; se nenhum existir, um placeholder geométrico é desenhado. Em modo `local` (padrão), apenas `Icons/{icon}.png` é usado (comportamento atual).
 
 ---
 

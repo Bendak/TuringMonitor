@@ -240,10 +240,6 @@ public class LayoutManager : ILayoutManager
                 DrawIconFile(ctx, cachePath, w, h);
                 return;
             }
-            if (System.IO.File.Exists(localPath)) {
-                DrawIconFile(ctx, localPath, w, h);
-                return;
-            }
 
             try {
                 System.IO.Directory.CreateDirectory(_iconCachePath);

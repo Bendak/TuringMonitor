@@ -76,6 +76,9 @@ Themes are located in `Assets/Themes/`.
 | `FontPath` | Path to a `.ttf` font file (relative to root). |
 | `DebugMode` | If `true`, draws red bounding boxes around elements. |
 | `Latitude` / `Longitude` | Geographical coordinates for weather. |
+| `WeatherApi` | Weather data provider. Default `openmeteo` (keyless). Optional: `openweather` or `openweathermap` (alias) — requires an API key. |
+| `WeatherIconsSource` | Source for weather icons. Default `local` (uses `Icons/{icon}.png` from theme). Optional: `online` — downloads OWM icons to `IconCache/` on first use. Local icons always take precedence and are never overwritten. |
+| `OpenWeatherApiKey` | API key for OpenWeather when `WeatherApi=openweather`. Recommended to put the key in `appsettings.json` (`OpenWeatherApiKey`) instead — it has priority over `theme.json`. See [Weather Providers](#weather-providers). |
 
 ### Element Types
 
@@ -94,6 +97,32 @@ Themes are located in `Assets/Themes/`.
 - `NetInMbps`, `NetOutMbps`, `NetInString`, `NetOutString`
 - `WeatherTemp`, `WeatherIcon`
 - `DateTime`
+
+### Weather Providers
+
+TuringMonitor supports two weather data providers, selectable per theme via `WeatherApi` in `theme.json`:
+
+| Provider | `WeatherApi` value | API Key | Endpoint |
+| :--- | :--- | :--- | :--- |
+| **Open-Meteo** (default) | `openmeteo` | none | `api.open-meteo.com/v1/forecast` |
+| **OpenWeather** (optional) | `openweather` (or alias `openweathermap`) | required | `api.openweathermap.org/data/2.5/weather` (Current Weather Data 2.5, free tier ~1000 calls/day) |
+
+**API Key resolution**: when `WeatherApi=openweather`, the key is resolved as `appsettings.json:OpenWeatherApiKey` (priority) ?? `theme.json:OpenWeatherApiKey`. To keep your key out of the theme folder (and out of any shared theme download), place it in `appsettings.json` or, preferably, `appsettings.local.json` (gitignored by default — see `.gitignore`):
+
+```json
+{
+  "OpenWeatherApiKey": "your-api-key-here"
+}
+```
+
+**Fallback behavior**:
+
+- If the key is missing or invalid (HTTP 401) with `openweather` configured → logs `ERROR`, falls back **permanently** to Open-Meteo for the current session.
+- If the OpenWeather call fails transiently (timeout / 5xx / network) → logs `WARNING`, keeps `openweather` as the provider, and uses the last cached value. Does not mix providers within a session.
+- If `WeatherApi` is an unknown value → logs `ERROR`, uses `openmeteo`.
+- Open-Meteo (`openmeteo`, the default) keeps the existing behavior unchanged.
+
+**Icons**: weather icon codes are native OpenWeather codes (`01d`, `04n`, etc.). When `WeatherIconsSource=online`, icons are downloaded once to `Assets/Themes/[Theme]/IconCache/{icon}.png` and reused from cache. A local icon in `Assets/Themes/[Theme]/Icons/{icon}.png` always takes precedence over the online download and is never overwritten. If the download fails, the local icon is used as fallback; if neither exists, a geometric placeholder is drawn.
 
 ---
 

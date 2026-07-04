@@ -391,6 +391,9 @@ FodyWeavers.xsd
 # Local History for Visual Studio Code
 .history/
 
+# Local app settings (may contain API keys, e.g. OpenWeather)
+appsettings.local.json
+
 # Windows Installer files from build outputs
 *.cab
 *.msi

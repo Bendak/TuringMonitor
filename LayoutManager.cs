@@ -57,6 +57,10 @@ public class LayoutManager : ILayoutManager
     private string _themePath => System.IO.Path.Combine(_themesRoot, _themeName);
     private string _jsonPath => System.IO.Path.Combine(_themePath, "theme.json");
     private string _iconsPath => System.IO.Path.Combine(_themePath, "Icons");
+    private string _iconCachePath => System.IO.Path.Combine(_themePath, "IconCache");
+
+    private readonly HttpClient _iconHttp = new() { Timeout = TimeSpan.FromSeconds(10) };
+    private const string OwmIconBaseUrl = "https://openweathermap.org/themes/openweathermap/assets/vendor/owm/img/widgets/";
 
     private readonly object _themeLock = new();
     private Image<Rgb24>? _backgroundImage;
@@ -215,16 +219,62 @@ public class LayoutManager : ILayoutManager
 
     private void DrawIconWithPlaceholder(IImageProcessingContext ctx, int w, int h, string iconCode)
     {
+        var source = Theme?.WeatherIconsSource ?? "local";
+        var normalizedSource = (source ?? "local").Trim().ToLowerInvariant();
+
+        if (normalizedSource == "online")
+        {
+            var cachePath = System.IO.Path.Combine(_iconCachePath, $"{iconCode}.png");
+            var localPath = System.IO.Path.Combine(_iconsPath, $"{iconCode}.png");
+
+            if (System.IO.File.Exists(cachePath)) {
+                DrawIconFile(ctx, cachePath, w, h);
+                return;
+            }
+            if (System.IO.File.Exists(localPath)) {
+                DrawIconFile(ctx, localPath, w, h);
+                return;
+            }
+
+            try {
+                System.IO.Directory.CreateDirectory(_iconCachePath);
+                var bytes = _iconHttp.GetByteArrayAsync(OwmIconBaseUrl + $"{iconCode}.png").GetAwaiter().GetResult();
+                System.IO.File.WriteAllBytes(cachePath, bytes);
+                DrawIconFile(ctx, cachePath, w, h);
+                return;
+            }
+            catch (Exception ex) {
+                _logger.LogWarning(ex, "Failed to download weather icon {Icon}; using fallback", iconCode);
+            }
+
+            if (System.IO.File.Exists(localPath)) {
+                DrawIconFile(ctx, localPath, w, h);
+                return;
+            }
+            DrawPlaceholder(ctx, w, h, iconCode);
+            return;
+        }
+
         var iconPath = System.IO.Path.Combine(_iconsPath, $"{iconCode}.png");
         if (System.IO.File.Exists(iconPath)) {
-            using var icon = Image.Load<Rgba32>(iconPath);
-            icon.Mutate(x => x.Resize(w, h));
-            ctx.DrawImage(icon, 1f);
+            DrawIconFile(ctx, iconPath, w, h);
         } else {
-            int code = 0; int.TryParse(iconCode, out code);
-            var color = code <= 3 ? SixLabors.ImageSharp.Color.Yellow : SixLabors.ImageSharp.Color.DeepSkyBlue;
-            ctx.Fill(color, new EllipsePolygon(w/2f, h/2f, Math.Min(w,h)/2f - 2));
+            DrawPlaceholder(ctx, w, h, iconCode);
         }
+    }
+
+    private static void DrawIconFile(IImageProcessingContext ctx, string path, int w, int h)
+    {
+        using var icon = Image.Load<Rgba32>(path);
+        icon.Mutate(x => x.Resize(w, h));
+        ctx.DrawImage(icon, 1f);
+    }
+
+    private static void DrawPlaceholder(IImageProcessingContext ctx, int w, int h, string iconCode)
+    {
+        int code = 0; int.TryParse(iconCode, out code);
+        var color = code <= 3 ? SixLabors.ImageSharp.Color.Yellow : SixLabors.ImageSharp.Color.DeepSkyBlue;
+        ctx.Fill(color, new EllipsePolygon(w / 2f, h / 2f, Math.Min(w, h) / 2f - 2));
     }
 
     private void DrawProgressBar(IImageProcessingContext ctx, int w, int h, ThemeElement el, float percent, SixLabors.ImageSharp.Color activeColor, SixLabors.ImageSharp.Color offColor)

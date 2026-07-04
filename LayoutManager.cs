@@ -140,6 +140,8 @@ public class LayoutManager : ILayoutManager
             if (oldBg != null) try { oldBg.Dispose(); } catch { }
         }
 
+        if (newTheme != null)
+            _logger.LogInformation("Weather icons source: {Source}", string.IsNullOrEmpty(newTheme.WeatherIconsSource) ? "local" : newTheme.WeatherIconsSource);
         DrawBackground();
     }
 
@@ -240,6 +242,7 @@ public class LayoutManager : ILayoutManager
                 System.IO.Directory.CreateDirectory(_iconCachePath);
                 var bytes = _iconHttp.GetByteArrayAsync(OwmIconBaseUrl + $"{iconCode}.png").GetAwaiter().GetResult();
                 System.IO.File.WriteAllBytes(cachePath, bytes);
+                _logger.LogInformation("Weather icon downloaded to cache: {Path}", System.IO.Path.GetFullPath(cachePath));
                 DrawIconFile(ctx, cachePath, w, h);
                 return;
             }

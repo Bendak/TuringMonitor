@@ -70,6 +70,8 @@ public class LinuxTelemetry : ITelemetry
 
         _weatherApi = normalized;
         if (!string.IsNullOrEmpty(key)) _openWeatherApiKey = key;
+
+        _logger.LogInformation("Weather provider selected: {Provider}", _weatherApi);
     }
 
     public Task<WeatherStats> GetWeatherAsync(double lat, double lon)

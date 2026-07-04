@@ -191,7 +191,7 @@ public class Worker : BackgroundService
                 }
 
                 var drawnRegions = new List<Rect>();
-                var toDraw = new List<(ThemeElement el, object? value)>();
+                var toDraw = new List<(ThemeElement el, object value)>();
 
                 foreach (var el in elements) {
                     object? value = el.Source switch {

@@ -5,7 +5,13 @@ using TuringMonitor;
 var builder = Host.CreateApplicationBuilder(args);
 
 builder.Services.AddSingleton<IDisplay, TuringSmartScreenDriver>();
-builder.Services.AddSingleton<ITelemetry, LinuxTelemetry>();
+builder.Services.AddSingleton<ITelemetry>(sp =>
+{
+    var options = sp.GetRequiredService<IOptions<TuringMonitorOptions>>();
+    return new LinuxTelemetry(
+        sp.GetRequiredService<ILogger<LinuxTelemetry>>(),
+        options);
+});
 builder.Services.AddSingleton<ILayoutManager>(sp =>
 {
     var options = sp.GetRequiredService<IOptions<TuringMonitorOptions>>().Value;

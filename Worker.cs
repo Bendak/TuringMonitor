@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using System.Diagnostics;
+using Microsoft.Extensions.Options;
 
 namespace TuringMonitor;
 
@@ -46,17 +47,20 @@ public class Worker : BackgroundService
     private readonly IDisplay _lcd;
     private readonly ILayoutManager _layout;
     private readonly ITelemetry _telemetry;
+    private readonly IOptions<TuringMonitorOptions> _options;
     private readonly Channel<TelemetrySnapshot> _channel;
 
     private const int ForceRedrawIntervalSec = 30;
     private int _forceRedrawCounter;
+    private bool _weatherConfigured;
 
-    public Worker(ILogger<Worker> logger, IDisplay lcd, ILayoutManager layout, ITelemetry telemetry)
+    public Worker(ILogger<Worker> logger, IDisplay lcd, ILayoutManager layout, ITelemetry telemetry, IOptions<TuringMonitorOptions> options)
     {
         _logger = logger;
         _lcd = lcd;
         _layout = layout;
         _telemetry = telemetry;
+        _options = options;
         _channel = Channel.CreateBounded<TelemetrySnapshot>(new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropOldest });
     }
 
@@ -84,7 +88,14 @@ public class Worker : BackgroundService
         while (!stoppingToken.IsCancellationRequested)
         {
             try {
-                _layout.ReloadIfNeeded();
+                if (_layout.ReloadIfNeeded() || !_weatherConfigured) {
+                    var theme = _layout.Theme;
+                    if (theme != null && _telemetry is LinuxTelemetry lt) {
+                        var resolvedKey = _options.Value.OpenWeatherApiKey ?? theme.OpenWeatherApiKey;
+                        lt.ConfigureWeather(theme.WeatherApi, resolvedKey);
+                        _weatherConfigured = true;
+                    }
+                }
                 var ram = _telemetry.GetRamUsage();
                 var gpu = _telemetry.GetGpuStats();
                 var net = _telemetry.GetNetStats();
@@ -183,7 +194,7 @@ public class Worker : BackgroundService
                 }
 
                 var drawnRegions = new List<Rect>();
-                var toDraw = new List<(ThemeElement el, object? value)>();
+                var toDraw = new List<(ThemeElement el, object value)>();
 
                 foreach (var el in elements) {
                     object? value = el.Source switch {

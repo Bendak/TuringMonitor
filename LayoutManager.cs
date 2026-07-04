@@ -38,6 +38,9 @@ public class ThemeConfig
     public bool DebugMode { get; set; }
     public double Latitude { get; set; }
     public double Longitude { get; set; }
+    public string WeatherApi { get; set; } = "openmeteo";
+    public string WeatherIconsSource { get; set; } = "local";
+    public string? OpenWeatherApiKey { get; set; } = null;
     public List<ThemeElement> Elements { get; set; } = new();
 }
 
@@ -54,11 +57,16 @@ public class LayoutManager : ILayoutManager
     private string _themePath => System.IO.Path.Combine(_themesRoot, _themeName);
     private string _jsonPath => System.IO.Path.Combine(_themePath, "theme.json");
     private string _iconsPath => System.IO.Path.Combine(_themePath, "Icons");
+    private string _iconCachePath => System.IO.Path.Combine(_themePath, "IconCache");
+
+    private readonly HttpClient _iconHttp = new() { Timeout = TimeSpan.FromSeconds(10) };
+    private const string OwmIconBaseUrl = "https://openweathermap.org/themes/openweathermap/assets/vendor/owm/img/widgets/";
 
     private readonly object _themeLock = new();
     private Image<Rgb24>? _backgroundImage;
     private FontFamily? _fontFamily;
     private DateTime _lastJsonWrite;
+    private string? _lastLoggedIconsSource;
 
     public ThemeConfig? Theme { get; private set; }
 
@@ -76,8 +84,7 @@ public class LayoutManager : ILayoutManager
         if (string.IsNullOrEmpty(hex) || hex == "transparent") return SixLabors.ImageSharp.Color.Transparent;
         try { return SixLabors.ImageSharp.Color.ParseHex(hex.StartsWith("#") ? hex : "#" + hex); } catch { return fallback; }
     }
-
-    public void ReloadIfNeeded(bool force = false)
+    public bool ReloadIfNeeded(bool force = false)
     {
         ThemeConfig? newTheme = null;
         Image<Rgb24>? newBg = null;
@@ -95,11 +102,11 @@ public class LayoutManager : ILayoutManager
                     System.IO.File.Copy(templatePath, _jsonPath);
                     _logger.LogInformation("IMPORTANT: Please edit theme.json with your coordinates for accurate weather data.");
                 }
-                else return;
+                else return false;
             }
 
             var currentWrite = System.IO.File.GetLastWriteTime(_jsonPath);
-            if (!force && currentWrite <= _lastJsonWrite) return;
+            if (!force && currentWrite <= _lastJsonWrite) return false;
 
             _logger.LogInformation("Loading theme: {Theme}...", _themeName);
             var json = System.IO.File.ReadAllText(_jsonPath);
@@ -119,10 +126,10 @@ public class LayoutManager : ILayoutManager
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to reload theme {Theme}", _themeName);
-            return;
+            return false;
         }
 
-        if (!shouldUpdate) return;
+        if (!shouldUpdate) return false;
 
         lock (_themeLock)
         {
@@ -133,7 +140,16 @@ public class LayoutManager : ILayoutManager
             if (oldBg != null) try { oldBg.Dispose(); } catch { }
         }
 
+        if (newTheme != null) {
+            var source = string.IsNullOrEmpty(newTheme.WeatherIconsSource) ? "local" : newTheme.WeatherIconsSource;
+            if (_lastLoggedIconsSource != source) {
+                _lastLoggedIconsSource = source;
+                _logger.LogInformation("Weather icons source: {Source}", source);
+            }
+        }
+
         DrawBackground();
+        return true;
     }
 
     public void DrawBackground()
@@ -212,16 +228,59 @@ public class LayoutManager : ILayoutManager
 
     private void DrawIconWithPlaceholder(IImageProcessingContext ctx, int w, int h, string iconCode)
     {
+        var source = Theme?.WeatherIconsSource ?? "local";
+        var normalizedSource = (source ?? "local").Trim().ToLowerInvariant();
+
+        if (normalizedSource == "online")
+        {
+            var cachePath = System.IO.Path.Combine(_iconCachePath, $"{iconCode}.png");
+            var localPath = System.IO.Path.Combine(_iconsPath, $"{iconCode}.png");
+
+            if (System.IO.File.Exists(cachePath)) {
+                DrawIconFile(ctx, cachePath, w, h);
+                return;
+            }
+
+            try {
+                System.IO.Directory.CreateDirectory(_iconCachePath);
+                var bytes = _iconHttp.GetByteArrayAsync(OwmIconBaseUrl + $"{iconCode}.png").GetAwaiter().GetResult();
+                System.IO.File.WriteAllBytes(cachePath, bytes);
+                _logger.LogInformation("Weather icon downloaded to cache: {Path}", System.IO.Path.GetFullPath(cachePath));
+                DrawIconFile(ctx, cachePath, w, h);
+                return;
+            }
+            catch (Exception ex) {
+                _logger.LogWarning(ex, "Failed to download weather icon {Icon}; using fallback", iconCode);
+            }
+
+            if (System.IO.File.Exists(localPath)) {
+                DrawIconFile(ctx, localPath, w, h);
+                return;
+            }
+            DrawPlaceholder(ctx, w, h, iconCode);
+            return;
+        }
+
         var iconPath = System.IO.Path.Combine(_iconsPath, $"{iconCode}.png");
         if (System.IO.File.Exists(iconPath)) {
-            using var icon = Image.Load<Rgba32>(iconPath);
-            icon.Mutate(x => x.Resize(w, h));
-            ctx.DrawImage(icon, 1f);
+            DrawIconFile(ctx, iconPath, w, h);
         } else {
-            int code = 0; int.TryParse(iconCode, out code);
-            var color = code <= 3 ? SixLabors.ImageSharp.Color.Yellow : SixLabors.ImageSharp.Color.DeepSkyBlue;
-            ctx.Fill(color, new EllipsePolygon(w/2f, h/2f, Math.Min(w,h)/2f - 2));
+            DrawPlaceholder(ctx, w, h, iconCode);
         }
+    }
+
+    private static void DrawIconFile(IImageProcessingContext ctx, string path, int w, int h)
+    {
+        using var icon = Image.Load<Rgba32>(path);
+        icon.Mutate(x => x.Resize(w, h));
+        ctx.DrawImage(icon, 1f);
+    }
+
+    private static void DrawPlaceholder(IImageProcessingContext ctx, int w, int h, string iconCode)
+    {
+        int code = 0; int.TryParse(iconCode, out code);
+        var color = code <= 3 ? SixLabors.ImageSharp.Color.Yellow : SixLabors.ImageSharp.Color.DeepSkyBlue;
+        ctx.Fill(color, new EllipsePolygon(w / 2f, h / 2f, Math.Min(w, h) / 2f - 2));
     }
 
     private void DrawProgressBar(IImageProcessingContext ctx, int w, int h, ThemeElement el, float percent, SixLabors.ImageSharp.Color activeColor, SixLabors.ImageSharp.Color offColor)

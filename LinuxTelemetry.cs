@@ -1,9 +1,11 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Net.Http.Json;
+using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace TuringMonitor;
 
@@ -30,6 +32,10 @@ public class LinuxTelemetry : ITelemetry
     private DateTime _lastWeatherUpdate = DateTime.MinValue;
     private volatile bool _weatherFetching;
 
+    private string _weatherApi = "openmeteo";
+    private string? _openWeatherApiKey;
+    private volatile bool _openWeatherFailedPermanent;
+
     private DateTime _lastGpuStatsTime = DateTime.MinValue;
     private (float Load, float Temp, float Power, float VramUsed, float VramTotal) _lastGpuStats;
 
@@ -37,10 +43,11 @@ public class LinuxTelemetry : ITelemetry
     public string GpuName { get; private set; } = "Unknown GPU";
     public string GpuModel { get; private set; } = "Unknown GPU";
 
-    public LinuxTelemetry(ILogger<LinuxTelemetry> logger, HttpClient? http = null)
+    public LinuxTelemetry(ILogger<LinuxTelemetry> logger, IOptions<TuringMonitorOptions>? options = null, HttpClient? http = null)
     {
         _logger = logger;
         _http = http ?? new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        _openWeatherApiKey = options?.Value.OpenWeatherApiKey;
 
         FindCpuTempPath();
         FindCpuPowerPath();
@@ -49,6 +56,20 @@ public class LinuxTelemetry : ITelemetry
         CpuName = GetCpuFriendlyName();
         GpuName = GetGpuFullName();
         GpuModel = GetGpuShortName(GpuName);
+    }
+
+    public void ConfigureWeather(string api, string? key)
+    {
+        var normalized = (api ?? "openmeteo").Trim().ToLowerInvariant();
+        if (normalized != "openmeteo" && normalized != "openweather" && normalized != "openweathermap")
+        {
+            _logger.LogError("Unknown weather_api '{Api}'; using Open-Meteo. Valid: openmeteo, openweather, openweathermap", api);
+            normalized = "openmeteo";
+        }
+        if (normalized == "openweathermap") normalized = "openweather";
+
+        _weatherApi = normalized;
+        if (!string.IsNullOrEmpty(key)) _openWeatherApiKey = key;
     }
 
     public Task<WeatherStats> GetWeatherAsync(double lat, double lon)
@@ -63,11 +84,22 @@ public class LinuxTelemetry : ITelemetry
             return Task.FromResult(_lastWeather ?? new WeatherStats(0, "01d"));
 
         _weatherFetching = true;
-        _ = FetchWeatherAsync(lat, lon);
+
+        bool useOpenWeather = _weatherApi == "openweather" && !_openWeatherFailedPermanent;
+        if (_weatherApi == "openweather" && !_openWeatherFailedPermanent && string.IsNullOrEmpty(_openWeatherApiKey))
+        {
+            _logger.LogError("OpenWeather selected but no API key found; falling back to Open-Meteo");
+            _openWeatherFailedPermanent = true;
+            useOpenWeather = false;
+        }
+
+        _ = useOpenWeather
+            ? FetchOpenWeatherAsync(lat, lon)
+            : FetchOpenMeteoAsync(lat, lon);
         return Task.FromResult(_lastWeather ?? new WeatherStats(0, "01d"));
     }
 
-    private async Task FetchWeatherAsync(double lat, double lon)
+    private async Task FetchOpenMeteoAsync(double lat, double lon)
     {
         try {
             var url = $"https://api.open-meteo.com/v1/forecast?latitude={lat.ToString(CultureInfo.InvariantCulture)}&longitude={lon.ToString(CultureInfo.InvariantCulture)}&current=temperature_2m,weather_code,is_day";
@@ -86,6 +118,55 @@ public class LinuxTelemetry : ITelemetry
         }
         catch (Exception ex) {
             _logger.LogDebug(ex, "Failed to fetch weather data; will retry in 5 min");
+            _lastWeatherUpdate = DateTime.Now;
+        }
+        finally {
+            _weatherFetching = false;
+        }
+    }
+
+    private async Task FetchOpenWeatherAsync(double lat, double lon)
+    {
+        try {
+            var url = $"https://api.openweathermap.org/data/2.5/weather?lat={lat.ToString(CultureInfo.InvariantCulture)}&lon={lon.ToString(CultureInfo.InvariantCulture)}&units=metric&appid={_openWeatherApiKey}";
+            using var resp = await _http.GetAsync(url);
+
+            if (resp.StatusCode == HttpStatusCode.Unauthorized) {
+                _logger.LogError("OpenWeather API key invalid (401); falling back to Open-Meteo permanently");
+                _openWeatherFailedPermanent = true;
+                _weatherFetching = false;
+                _ = FetchOpenMeteoAsync(lat, lon);
+                return;
+            }
+
+            if ((int)resp.StatusCode >= 500) {
+                _logger.LogWarning("OpenWeather transient failure (HTTP {Status}); keeping provider, using cached value", (int)resp.StatusCode);
+                _lastWeatherUpdate = DateTime.Now;
+                _weatherFetching = false;
+                return;
+            }
+
+            resp.EnsureSuccessStatusCode();
+            var response = await resp.Content.ReadFromJsonAsync(WeatherJsonContext.Default.JsonElement);
+
+            if (response.ValueKind != JsonValueKind.Undefined) {
+                float temp = response.GetProperty("main").GetProperty("temp").GetSingle();
+                string iconId = response.GetProperty("weather")[0].GetProperty("icon").GetString() ?? "01d";
+
+                _lastWeather = new WeatherStats(temp, iconId);
+                _lastWeatherUpdate = DateTime.Now;
+            }
+        }
+        catch (TaskCanceledException) {
+            _logger.LogWarning("OpenWeather transient failure (timeout); keeping provider, using cached value");
+            _lastWeatherUpdate = DateTime.Now;
+        }
+        catch (HttpRequestException ex) {
+            _logger.LogWarning("OpenWeather transient failure (network); keeping provider, using cached value: {Msg}", ex.Message);
+            _lastWeatherUpdate = DateTime.Now;
+        }
+        catch (Exception ex) {
+            _logger.LogWarning("OpenWeather transient failure; keeping provider, using cached value: {Msg}", ex.Message);
             _lastWeatherUpdate = DateTime.Now;
         }
         finally {

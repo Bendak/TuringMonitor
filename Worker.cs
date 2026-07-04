@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using System.Diagnostics;
+using Microsoft.Extensions.Options;
 
 namespace TuringMonitor;
 
@@ -46,17 +47,19 @@ public class Worker : BackgroundService
     private readonly IDisplay _lcd;
     private readonly ILayoutManager _layout;
     private readonly ITelemetry _telemetry;
+    private readonly IOptions<TuringMonitorOptions> _options;
     private readonly Channel<TelemetrySnapshot> _channel;
 
     private const int ForceRedrawIntervalSec = 30;
     private int _forceRedrawCounter;
 
-    public Worker(ILogger<Worker> logger, IDisplay lcd, ILayoutManager layout, ITelemetry telemetry)
+    public Worker(ILogger<Worker> logger, IDisplay lcd, ILayoutManager layout, ITelemetry telemetry, IOptions<TuringMonitorOptions> options)
     {
         _logger = logger;
         _lcd = lcd;
         _layout = layout;
         _telemetry = telemetry;
+        _options = options;
         _channel = Channel.CreateBounded<TelemetrySnapshot>(new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropOldest });
     }
 
@@ -85,6 +88,11 @@ public class Worker : BackgroundService
         {
             try {
                 _layout.ReloadIfNeeded();
+                var theme = _layout.Theme;
+                if (theme != null) {
+                    var resolvedKey = _options.Value.OpenWeatherApiKey ?? theme.OpenWeatherApiKey;
+                    if (_telemetry is LinuxTelemetry lt) lt.ConfigureWeather(theme.WeatherApi, resolvedKey);
+                }
                 var ram = _telemetry.GetRamUsage();
                 var gpu = _telemetry.GetGpuStats();
                 var net = _telemetry.GetNetStats();

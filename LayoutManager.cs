@@ -66,6 +66,7 @@ public class LayoutManager : ILayoutManager
     private Image<Rgb24>? _backgroundImage;
     private FontFamily? _fontFamily;
     private DateTime _lastJsonWrite;
+    private string? _lastLoggedIconsSource;
 
     public ThemeConfig? Theme { get; private set; }
 
@@ -140,8 +141,13 @@ public class LayoutManager : ILayoutManager
             if (oldBg != null) try { oldBg.Dispose(); } catch { }
         }
 
-        if (newTheme != null)
-            _logger.LogInformation("Weather icons source: {Source}", string.IsNullOrEmpty(newTheme.WeatherIconsSource) ? "local" : newTheme.WeatherIconsSource);
+        if (newTheme != null) {
+            var source = string.IsNullOrEmpty(newTheme.WeatherIconsSource) ? "local" : newTheme.WeatherIconsSource;
+            if (_lastLoggedIconsSource != source) {
+                _lastLoggedIconsSource = source;
+                _logger.LogInformation("Weather icons source: {Source}", source);
+            }
+        }
         DrawBackground();
     }
 

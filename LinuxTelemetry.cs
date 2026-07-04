@@ -34,6 +34,7 @@ public class LinuxTelemetry : ITelemetry
 
     private string _weatherApi = "openmeteo";
     private string? _openWeatherApiKey;
+    private string? _lastLoggedWeatherApi;
     private volatile bool _openWeatherFailedPermanent;
 
     private DateTime _lastGpuStatsTime = DateTime.MinValue;
@@ -71,7 +72,11 @@ public class LinuxTelemetry : ITelemetry
         _weatherApi = normalized;
         if (!string.IsNullOrEmpty(key)) _openWeatherApiKey = key;
 
-        _logger.LogInformation("Weather provider selected: {Provider}", _weatherApi);
+        if (_lastLoggedWeatherApi != _weatherApi)
+        {
+            _lastLoggedWeatherApi = _weatherApi;
+            _logger.LogInformation("Weather provider selected: {Provider}", _weatherApi);
+        }
     }
 
     public Task<WeatherStats> GetWeatherAsync(double lat, double lon)

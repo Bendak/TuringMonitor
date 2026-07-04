@@ -38,6 +38,9 @@ public class ThemeConfig
     public bool DebugMode { get; set; }
     public double Latitude { get; set; }
     public double Longitude { get; set; }
+    public string WeatherApi { get; set; } = "openmeteo";
+    public string WeatherIconsSource { get; set; } = "local";
+    public string? OpenWeatherApiKey { get; set; } = null;
     public List<ThemeElement> Elements { get; set; } = new();
 }
 

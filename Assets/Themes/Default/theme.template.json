@@ -4,6 +4,9 @@
   "DebugMode": false,
   "Latitude": 0.0,
   "Longitude": 0.0,
+  "WeatherApi": "openmeteo",
+  "WeatherIconsSource": "local",
+  "OpenWeatherApiKey": null,
   "Elements": [
     {
       "Id": "cpu_name",

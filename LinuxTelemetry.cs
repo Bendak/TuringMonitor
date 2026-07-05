@@ -11,7 +11,10 @@ namespace TuringMonitor;
 
 public record WeatherStats(float Temp, string IconId);
 
+internal record WeatherCacheEntry(float Temp, string IconId, DateTime UpdatedAt);
+
 [JsonSerializable(typeof(JsonElement))]
+[JsonSerializable(typeof(WeatherCacheEntry))]
 internal partial class WeatherJsonContext : JsonSerializerContext { }
 
 public class LinuxTelemetry : ITelemetry
@@ -31,11 +34,47 @@ public class LinuxTelemetry : ITelemetry
     private WeatherStats? _lastWeather;
     private DateTime _lastWeatherUpdate = DateTime.MinValue;
     private volatile bool _weatherFetching;
+    private int _weatherFetchAttempts;
+    private DateTime _nextAllowedFetch = DateTime.MinValue;
 
     private string _weatherApi = "openmeteo";
     private string? _openWeatherApiKey;
     private string? _lastLoggedWeatherApi;
     private volatile bool _openWeatherFailedPermanent;
+
+    // Persisted weather cache location. Prefer /var/lib/turing-monitor (FHS-canonical for service
+    // state); fall back to user home when not running as a service / not writable.
+    private static readonly string WeatherCacheFile = ResolveWeatherCacheFile();
+
+    private static string ResolveWeatherCacheFile()
+    {
+        var serviceDir = "/var/lib/turing-monitor";
+        try {
+            if (!Directory.Exists(serviceDir))
+                Directory.CreateDirectory(serviceDir);
+            // Quick writability probe
+            var probe = Path.Combine(serviceDir, ".wprobe");
+            File.WriteAllText(probe, "x");
+            File.Delete(probe);
+            return Path.Combine(serviceDir, "weather.json");
+        }
+        catch {
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (string.IsNullOrEmpty(home)) home = "/tmp";
+            return Path.Combine(home, ".turing-monitor-weather.json");
+        }
+    }
+
+    private const double WeatherCacheTtlMinutes = 30.0;
+    private const int WeatherMaxRetries = 5;
+    private static readonly TimeSpan[] WeatherRetryBackoff =
+    {
+        TimeSpan.FromSeconds(5),
+        TimeSpan.FromSeconds(10),
+        TimeSpan.FromSeconds(20),
+        TimeSpan.FromSeconds(40),
+        TimeSpan.FromSeconds(80)
+    };
 
     private DateTime _lastGpuStatsTime = DateTime.MinValue;
     private (float Load, float Temp, float Power, float VramUsed, float VramTotal) _lastGpuStats;
@@ -57,6 +96,43 @@ public class LinuxTelemetry : ITelemetry
         CpuName = GetCpuFriendlyName();
         GpuName = GetGpuFullName();
         GpuModel = GetGpuShortName(GpuName);
+
+        LoadPersistedWeather();
+    }
+
+    private void LoadPersistedWeather()
+    {
+        try {
+            if (!File.Exists(WeatherCacheFile)) return;
+            var entry = JsonSerializer.Deserialize(WeatherCacheFile, WeatherJsonContext.Default.WeatherCacheEntry);
+            if (entry == null) return;
+
+            var age = DateTime.Now - entry.UpdatedAt;
+            // Only reuse cache if it's less than 6h old (avoid showing very stale data forever)
+            if (age.TotalHours < 6) {
+                _lastWeather = new WeatherStats(entry.Temp, entry.IconId);
+                _lastWeatherUpdate = entry.UpdatedAt;
+                _logger.LogInformation("Restored persisted weather cache: {Temp}C {Icon} (age {Age:g})", entry.Temp, entry.IconId, age);
+            }
+        }
+        catch (Exception ex) {
+            _logger.LogDebug(ex, "Failed to load persisted weather cache");
+        }
+    }
+
+    private void PersistWeather()
+    {
+        if (_lastWeather == null) return;
+        try {
+            var entry = new WeatherCacheEntry(_lastWeather.Temp, _lastWeather.IconId, _lastWeatherUpdate);
+            var dir = Path.GetDirectoryName(WeatherCacheFile);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+            File.WriteAllText(WeatherCacheFile, JsonSerializer.Serialize(entry, WeatherJsonContext.Default.WeatherCacheEntry));
+        }
+        catch (Exception ex) {
+            _logger.LogDebug(ex, "Failed to persist weather cache");
+        }
     }
 
     public void ConfigureWeather(string api, string? key)
@@ -82,31 +158,102 @@ public class LinuxTelemetry : ITelemetry
     public Task<WeatherStats> GetWeatherAsync(double lat, double lon)
     {
         var now = DateTime.Now;
-        if (_lastWeather != null && now - _lastWeatherUpdate < TimeSpan.FromMinutes(30))
-            return Task.FromResult(_lastWeather);
-        if (_lastWeather == null && now - _lastWeatherUpdate < TimeSpan.FromMinutes(5))
-            return Task.FromResult(new WeatherStats(0, "01d"));
 
+        // While a fetch with retries is in flight, just return current cached value
         if (_weatherFetching)
             return Task.FromResult(_lastWeather ?? new WeatherStats(0, "01d"));
 
-        _weatherFetching = true;
-
-        bool useOpenWeather = _weatherApi == "openweather" && !_openWeatherFailedPermanent;
-        if (_weatherApi == "openweather" && !_openWeatherFailedPermanent && string.IsNullOrEmpty(_openWeatherApiKey))
-        {
-            _logger.LogError("OpenWeather selected but no API key found; falling back to Open-Meteo");
-            _openWeatherFailedPermanent = true;
-            useOpenWeather = false;
+        // Decide when the next refresh should happen.
+        // If we have never successfully fetched, retry aggressively (every 5s the caller loop
+        // will land here, but we gate it via _nextAllowedFetch to honor the in-flight retry backoff).
+        if (_lastWeather == null) {
+            // No cached data yet: trigger fetch immediately if no retry backoff in effect
+            if (now >= _nextAllowedFetch) {
+                _weatherFetching = true;
+                bool useOpenWeather = ShouldUseOpenWeather();
+                _ = useOpenWeather
+                    ? FetchWithRetryAsync(lat, lon, FetchOpenWeatherAsync)
+                    : FetchWithRetryAsync(lat, lon, FetchOpenMeteoAsync);
+            }
+            return Task.FromResult(_lastWeather ?? new WeatherStats(0, "01d"));
         }
 
-        _ = useOpenWeather
-            ? FetchOpenWeatherAsync(lat, lon)
-            : FetchOpenMeteoAsync(lat, lon);
-        return Task.FromResult(_lastWeather ?? new WeatherStats(0, "01d"));
+        // We have a cached value: refresh on the 30-minute interval (continuous from last successful fetch)
+        if (now - _lastWeatherUpdate >= TimeSpan.FromMinutes(WeatherCacheTtlMinutes)) {
+            _weatherFetching = true;
+            bool useOpenWeather = ShouldUseOpenWeather();
+            _ = useOpenWeather
+                ? FetchWithRetryAsync(lat, lon, FetchOpenWeatherAsync)
+                : FetchWithRetryAsync(lat, lon, FetchOpenMeteoAsync);
+        }
+
+        return Task.FromResult(_lastWeather);
     }
 
-    private async Task FetchOpenMeteoAsync(double lat, double lon)
+    private bool ShouldUseOpenWeather()
+    {
+        if (_weatherApi != "openweather" || _openWeatherFailedPermanent)
+            return false;
+        if (string.IsNullOrEmpty(_openWeatherApiKey)) {
+            _logger.LogError("OpenWeather selected but no API key found; falling back to Open-Meteo");
+            _openWeatherFailedPermanent = true;
+            return false;
+        }
+        return true;
+    }
+
+    // Fetch once with the configured retry + exponential backoff strategy.
+    // On the first success, caches the value and stops retrying.
+    // If all attempts fail, schedules the next allowed fetch using the last backoff delay
+    // so the outer loop does not spin tightly.
+    private async Task FetchWithRetryAsync(
+        double lat, double lon,
+        Func<double, double, Task<bool>> fetchOnce)
+    {
+        _weatherFetchAttempts = 0;
+        try {
+            for (int attempt = 0; attempt <= WeatherMaxRetries; attempt++) {
+                _weatherFetchAttempts = attempt;
+                try {
+                    bool ok = await fetchOnce(lat, lon);
+                    if (ok) {
+                        // Success: persist + reset backoff gating
+                        PersistWeather();
+                        _nextAllowedFetch = DateTime.MinValue;
+                        return;
+                    }
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex) {
+                    _logger.LogDebug(ex, "Weather fetch attempt {Attempt}/{Max} failed", attempt + 1, WeatherMaxRetries + 1);
+                }
+
+                if (attempt < WeatherMaxRetries) {
+                    var delay = WeatherRetryBackoff[Math.Min(attempt, WeatherRetryBackoff.Length - 1)];
+                    _logger.LogDebug("Weather fetch retry {Attempt}/{Max}: backing off for {Delay:g}",
+                        attempt + 2, WeatherMaxRetries + 1, delay);
+                    await Task.Delay(delay);
+                }
+            }
+
+            // All retries exhausted: schedule next allowed fetch after the largest backoff
+            // so the caller loop does not hammer the API every second.
+            _nextAllowedFetch = DateTime.Now + WeatherRetryBackoff[^1];
+            _logger.LogWarning("Weather fetch failed after {Count} attempts; next attempt gated until {Until:g}",
+                WeatherMaxRetries + 1, _nextAllowedFetch);
+        }
+        catch (OperationCanceledException) { /* shutting down */ }
+        catch (Exception ex) {
+            _logger.LogError(ex, "Unexpected error in FetchWithRetryAsync");
+            _nextAllowedFetch = DateTime.Now + WeatherRetryBackoff[^1];
+        }
+        finally {
+            _weatherFetching = false;
+        }
+    }
+
+    // Returns true on success (cache updated), false on transient/any failure (caller will retry/backoff).
+    private async Task<bool> FetchOpenMeteoAsync(double lat, double lon)
     {
         try {
             var url = $"https://api.open-meteo.com/v1/forecast?latitude={lat.ToString(CultureInfo.InvariantCulture)}&longitude={lon.ToString(CultureInfo.InvariantCulture)}&current=temperature_2m,weather_code,is_day";
@@ -121,18 +268,20 @@ public class LinuxTelemetry : ITelemetry
 
                 _lastWeather = new WeatherStats(temp, iconId);
                 _lastWeatherUpdate = DateTime.Now;
+                _logger.LogInformation("Open-Meteo weather fetched: {Temp}C {Icon}", temp, iconId);
+                return true;
             }
+            _logger.LogWarning("Open-Meteo returned empty response");
+            return false;
         }
         catch (Exception ex) {
-            _logger.LogDebug(ex, "Failed to fetch weather data; will retry in 5 min");
-            _lastWeatherUpdate = DateTime.Now;
-        }
-        finally {
-            _weatherFetching = false;
+            _logger.LogDebug(ex, "Open-Meteo fetch failed");
+            return false;
         }
     }
 
-    private async Task FetchOpenWeatherAsync(double lat, double lon)
+    // Returns true on success, false on transient/any failure (caller will retry/backoff).
+    private async Task<bool> FetchOpenWeatherAsync(double lat, double lon)
     {
         try {
             var url = $"https://api.openweathermap.org/data/2.5/weather?lat={lat.ToString(CultureInfo.InvariantCulture)}&lon={lon.ToString(CultureInfo.InvariantCulture)}&units=metric&appid={_openWeatherApiKey}";
@@ -141,16 +290,13 @@ public class LinuxTelemetry : ITelemetry
             if (resp.StatusCode == HttpStatusCode.Unauthorized) {
                 _logger.LogError("OpenWeather API key invalid (401); falling back to Open-Meteo permanently");
                 _openWeatherFailedPermanent = true;
-                _weatherFetching = false;
-                _ = FetchOpenMeteoAsync(lat, lon);
-                return;
+                // Immediate fallback to Open-Meteo for this attempt
+                return await FetchOpenMeteoAsync(lat, lon);
             }
 
             if ((int)resp.StatusCode >= 500) {
-                _logger.LogWarning("OpenWeather transient failure (HTTP {Status}); keeping provider, using cached value", (int)resp.StatusCode);
-                _lastWeatherUpdate = DateTime.Now;
-                _weatherFetching = false;
-                return;
+                _logger.LogDebug("OpenWeather transient failure (HTTP {Status}); will retry", (int)resp.StatusCode);
+                return false;
             }
 
             resp.EnsureSuccessStatusCode();
@@ -162,22 +308,23 @@ public class LinuxTelemetry : ITelemetry
 
                 _lastWeather = new WeatherStats(temp, iconId);
                 _lastWeatherUpdate = DateTime.Now;
+                _logger.LogInformation("OpenWeather weather fetched: {Temp}C {Icon}", temp, iconId);
+                return true;
             }
+            _logger.LogWarning("OpenWeather returned empty response");
+            return false;
         }
         catch (TaskCanceledException) {
-            _logger.LogWarning("OpenWeather transient failure (timeout); keeping provider, using cached value");
-            _lastWeatherUpdate = DateTime.Now;
+            _logger.LogDebug("OpenWeather transient failure (timeout); will retry");
+            return false;
         }
         catch (HttpRequestException ex) {
-            _logger.LogWarning("OpenWeather transient failure (network); keeping provider, using cached value: {Msg}", ex.Message);
-            _lastWeatherUpdate = DateTime.Now;
+            _logger.LogDebug("OpenWeather transient failure (network); will retry: {Msg}", ex.Message);
+            return false;
         }
         catch (Exception ex) {
-            _logger.LogWarning("OpenWeather transient failure; keeping provider, using cached value: {Msg}", ex.Message);
-            _lastWeatherUpdate = DateTime.Now;
-        }
-        finally {
-            _weatherFetching = false;
+            _logger.LogDebug(ex, "OpenWeather transient failure; will retry");
+            return false;
         }
     }
 

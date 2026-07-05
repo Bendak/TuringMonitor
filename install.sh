@@ -37,6 +37,8 @@ echo "📂 Creating installation directories..."
 sudo mkdir -p "$INSTALL_DIR"
 sudo mkdir -p "$CONFIG_DIR"
 sudo mkdir -p "$ASSETS_DIR"
+sudo mkdir -p /var/lib/turing-monitor
+sudo chmod 755 /var/lib/turing-monitor
 
 # Stop service if exists and is running
 if systemctl is-active --quiet turing-monitor.service; then

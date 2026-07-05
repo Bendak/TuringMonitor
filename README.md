@@ -16,7 +16,7 @@
 - **Full Telemetry:** Real-time data for CPU, GPU (NVIDIA), RAM, Network, and Weather.
 - **Auto-Reconnect:** Automatic serial port reconnection with exponential backoff and port re-detection. The LCD recovers on its own after USB disconnects/reconnects.
 - **Robust Error Handling:** All failures are logged with appropriate severity (no silent exceptions). The service keeps running even if sensors or the LCD are unavailable.
-- **Non-Blocking Weather:** Weather data is fetched in the background (every 30 min) and never stalls the telemetry loop. Falls back gracefully if the API is unreachable.
+- **Non-Blocking Weather:** Weather data is fetched in the background (every 30 min, continuous interval from the last successful fetch) and never stalls the telemetry loop. Includes **exponential-backoff retry** (5s → 10s → 20s → 40s → 80s, up to 5 retries) so it survives slow network bring-up at boot. The last successful reading is **persisted to `/var/lib/turing-monitor/weather.json`** and restored on startup, so the display never shows a stale `0°C` after a reboot. Falls back gracefully if the API is unreachable.
 
 ---
 
@@ -121,6 +121,8 @@ TuringMonitor supports two weather data providers, selectable per theme via `Wea
 - If the OpenWeather call fails transiently (timeout / 5xx / network) → logs `WARNING`, keeps `openweather` as the provider, and uses the last cached value. Does not mix providers within a session.
 - If `WeatherApi` is an unknown value → logs `ERROR`, uses `openmeteo`.
 - Open-Meteo (`openmeteo`, the default) keeps the existing behavior unchanged.
+
+**Refresh scheduling & retry**: the cache TTL is **30 minutes continuous from the last successful fetch** (not aligned to wall-clock slots like :00/:30 — both APIs return instantaneous conditions, so aligning to fixed slots would only discard valid recently-fetched data). On failure, `FetchWithRetryAsync` retries up to 5 times with exponential backoff (**5s → 10s → 20s → 40s → 80s**); if all attempts fail, the next fetch is gated for 80s to avoid hammering the API. The last successful reading (temp, icon, timestamp) is persisted to `/var/lib/turing-monitor/weather.json` (with a `$HOME` fallback when not running as a service) and restored on startup if it is less than 6 hours old — so after a reboot the display shows the last known value immediately instead of `0°C` while the first fetch is in progress.
 
 **Icons**: weather icon codes are native OpenWeather codes (`01d`, `04n`, etc.). When `WeatherIconsSource=online`, icons are downloaded once to `Assets/Themes/[Theme]/IconCache/{icon}.png` and reused from cache. If a cached icon already exists it is used directly. If the download fails, the icon in `Assets/Themes/[Theme]/Icons/{icon}.png` is used as fallback; if neither exists, a geometric placeholder is drawn. In `local` mode (default), only `Icons/{icon}.png` is used (current behavior).
 

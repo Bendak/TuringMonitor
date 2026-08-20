@@ -120,8 +120,8 @@ public class Worker : BackgroundService
                     gpu.VramTotal > 0 ? (gpu.VramUsed / gpu.VramTotal) * 100f : 0,
                     $"{gpu.VramUsed/1024f:F1} GB / {gpu.VramTotal/1024f:F0} GB",
                     net.InMbps, net.OutMbps,
-                    $"{net.InMbps:F0} Mbps",
-                    $"{net.OutMbps:F0} Mbps",
+                    FormatRate(net.InMbps),
+                    FormatRate(net.OutMbps),
                     weather.Temp,
                     weather.IconId,
                     DateTime.Now
@@ -254,6 +254,15 @@ public class Worker : BackgroundService
         catch (OperationCanceledException) { }
         catch (Exception ex) { _logger.LogError(ex, "Consumer loop error"); }
         finally { _lcd.Dispose(); }
+    }
+
+    private static string FormatRate(float mbps)
+    {
+        if (mbps < 0) mbps = 0;
+        if (mbps >= 1000) return $"{mbps / 1000:F2} Gbps";
+        if (mbps >= 1) return $"{mbps:F1} Mbps";
+        if (mbps >= 0.001) return $"{mbps * 1000:F0} Kbps";
+        return $"{mbps * 1000000:F0} bps";
     }
 
     private static bool HasChanged(string source, TelemetrySnapshot current, TelemetrySnapshot last)

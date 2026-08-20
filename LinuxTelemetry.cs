@@ -91,7 +91,7 @@ public class LinuxTelemetry : ITelemetry
 
         FindCpuTempPath();
         FindCpuPowerPath();
-        FindActiveNetInterface();
+        EnsureNetInterface();
         SeedCpuUsage();
         CpuName = GetCpuFriendlyName();
         GpuName = GetGpuFullName();
@@ -349,21 +349,97 @@ public class LinuxTelemetry : ITelemetry
     public (float InMbps, float OutMbps) GetNetStats()
     {
         try {
+            EnsureNetInterface();
             if (_netInterface == null) return (0, 0);
-            var lines = File.ReadAllLines("/proc/net/dev");
-            var line = lines.FirstOrDefault(l => l.Trim().StartsWith(_netInterface + ":"));
+
+            var line = File.ReadAllLines("/proc/net/dev")
+                .FirstOrDefault(l => l.Trim().StartsWith(_netInterface + ":"));
             if (line == null) return (0, 0);
+
             var stats = line.Split(':')[1].Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            long currentIn = long.Parse(stats[0]), currentOut = long.Parse(stats[8]);
+            if (stats.Length < 9) return (0, 0);
+            if (!long.TryParse(stats[0], out long currentIn) || !long.TryParse(stats[8], out long currentOut))
+                return (0, 0);
+
             DateTime currentTime = DateTime.Now;
             double diffSeconds = (currentTime - _lastNetTime).TotalSeconds;
-            if (diffSeconds <= 0) return (0, 0);
-            float inMbps = (float)(((currentIn - _lastNetInBytes) * 8) / 1024.0 / 1024.0 / diffSeconds);
-            float outMbps = (float)(((currentOut - _lastNetOutBytes) * 8) / 1024.0 / 1024.0 / diffSeconds);
+            if (diffSeconds < 0.5) return (0, 0);
+
+            float inMbps = (float)((currentIn - _lastNetInBytes) * 8.0 / 1048576.0 / diffSeconds);
+            float outMbps = (float)((currentOut - _lastNetOutBytes) * 8.0 / 1048576.0 / diffSeconds);
+
             _lastNetInBytes = currentIn; _lastNetOutBytes = currentOut; _lastNetTime = currentTime;
             return (Math.Max(0, inMbps), Math.Max(0, outMbps));
         }
         catch (Exception ex) { _logger.LogWarning(ex, "GetNetStats failed"); return (0, 0); }
+    }
+
+    private void EnsureNetInterface()
+    {
+        bool valid = _netInterface != null
+            && File.Exists($"/sys/class/net/{_netInterface}")
+            && InterfaceIsUp(_netInterface);
+        if (valid) return;
+
+        string? iface = ResolveNetInterface();
+        if (iface == _netInterface) return;
+
+        _netInterface = iface;
+        if (iface != null) {
+            var line = File.ReadAllLines("/proc/net/dev").FirstOrDefault(l => l.Trim().StartsWith(iface + ":"));
+            if (line != null) {
+                var stats = line.Split(':')[1].Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (stats.Length >= 9 && long.TryParse(stats[0], out long rx) && long.TryParse(stats[8], out long tx)) {
+                    _lastNetInBytes = rx; _lastNetOutBytes = tx;
+                }
+            }
+            _lastNetTime = DateTime.Now;
+            _logger.LogInformation("Network: tracking interface {Iface}", iface);
+        }
+    }
+
+    private string? ResolveNetInterface()
+    {
+        try {
+            var all = new List<(string Name, long Rx, long Tx)>();
+            foreach (var line in File.ReadAllLines("/proc/net/dev").Skip(2)) {
+                var parts = line.Split(':', StringSplitOptions.TrimEntries);
+                if (parts.Length < 2 || parts[0] == "lo") continue;
+                var stats = parts[1].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (stats.Length >= 9 && long.TryParse(stats[0], out long rx) && long.TryParse(stats[8], out long tx))
+                    all.Add((parts[0], rx, tx));
+            }
+            var up = all.Where(i => InterfaceIsUp(i.Name)).ToList();
+            if (up.Count == 0) return null;
+
+            var def = GetDefaultRouteInterface();
+            if (def != null && up.Any(i => i.Name == def)) return def;
+            return up.OrderByDescending(i => i.Rx + i.Tx).First().Name;
+        }
+        catch { return null; }
+    }
+
+    private static bool InterfaceIsUp(string? iface)
+    {
+        if (iface == null) return false;
+        try {
+            var path = $"/sys/class/net/{iface}/operstate";
+            if (File.Exists(path)) return File.ReadAllText(path).Trim() == "up";
+            return true;
+        }
+        catch { return false; }
+    }
+
+    private static string? GetDefaultRouteInterface()
+    {
+        try {
+            foreach (var line in File.ReadAllLines("/proc/net/route").Skip(1)) {
+                var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length >= 2 && parts[1] == "00000000") return parts[0];
+            }
+        }
+        catch { }
+        return null;
     }
 
     private string GetGpuFullName()
@@ -513,27 +589,6 @@ public class LinuxTelemetry : ITelemetry
             return ((total - (free + buffers + cached)) / 1024 / 1024, total / 1024 / 1024);
         }
         catch (Exception ex) { _logger.LogWarning(ex, "GetRamUsage failed"); return (0, 0); }
-    }
-
-    private void FindActiveNetInterface()
-    {
-        try {
-            var lines = File.ReadAllLines("/proc/net/dev");
-            foreach (var line in lines.Skip(2)) {
-                var parts = line.Split(':', StringSplitOptions.TrimEntries);
-                if (parts.Length < 2 || parts[0] == "lo") continue;
-                var operstatePath = $"/sys/class/net/{parts[0]}/operstate";
-                if (File.Exists(operstatePath)) {
-                    var state = File.ReadAllText(operstatePath).Trim();
-                    if (state != "up") continue;
-                }
-                _netInterface = parts[0];
-                var stats = parts[1].Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                _lastNetInBytes = long.Parse(stats[0]); _lastNetOutBytes = long.Parse(stats[8]); _lastNetTime = DateTime.Now;
-                break;
-            }
-        }
-        catch (Exception ex) { _logger.LogDebug(ex, "FindActiveNetInterface failed"); }
     }
 
     private static float ParseKb(string line)

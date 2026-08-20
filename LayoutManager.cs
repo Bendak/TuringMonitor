@@ -60,7 +60,7 @@ public class LayoutManager : ILayoutManager
     private string _iconCachePath => System.IO.Path.Combine(_themePath, "IconCache");
 
     private readonly HttpClient _iconHttp = new() { Timeout = TimeSpan.FromSeconds(10) };
-    private const string OwmIconBaseUrl = "https://openweathermap.org/themes/openweathermap/assets/vendor/owm/img/widgets/";
+    private const string OwmIconBaseUrl = "https://openweathermap.org/payload/api/media/file/";
 
     private readonly object _themeLock = new();
     private Image<Rgb24>? _backgroundImage;

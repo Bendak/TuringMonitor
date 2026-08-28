@@ -72,7 +72,9 @@ public class Worker : BackgroundService
         try {
             _lcd.Open();
             _lcd.Reset();
+            Thread.Sleep(500);
             _lcd.Clear();
+            Thread.Sleep(500);
             _lcd.SetOrientation(2, 480, 320);
             _lcd.SetBrightness(100);
             _layout.DrawBackground();
@@ -155,8 +157,9 @@ public class Worker : BackgroundService
         _logger.LogInformation("TuringMonitor is stopping. Turning off LCD...");
         try {
             if (_lcd.IsOpen) {
-                _lcd.SetBrightness(0);
                 _lcd.Clear();
+                Thread.Sleep(500);
+                _lcd.SetBrightness(0);
             }
         }
         catch (Exception ex) {

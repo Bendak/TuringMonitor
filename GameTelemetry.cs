@@ -266,11 +266,14 @@ public sealed class GameTelemetry : IDisposable
                     {
                         if (!hasMangoHud && line.Contains("MangoHud", StringComparison.OrdinalIgnoreCase))
                             hasMangoHud = true;
-                        if (!hasMangoHud) continue;
                         if (line.Contains("vkd3d", StringComparison.OrdinalIgnoreCase)) sawVkd3d = true;
                         else if (line.Contains("dxvk", StringComparison.OrdinalIgnoreCase)) sawDxvk = true;
                         else if (line.Contains("libvulkan", StringComparison.OrdinalIgnoreCase)) sawVulkan = true;
                         else if (line.Contains("libGL.", StringComparison.OrdinalIgnoreCase)) sawGl = true;
+                    }
+                    if (!hasMangoHud)
+                    {
+                        sawVkd3d = sawDxvk = sawVulkan = sawGl = false;
                     }
                 }
                 catch { }

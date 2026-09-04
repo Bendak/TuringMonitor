@@ -251,12 +251,12 @@ public sealed class GameTelemetry : IDisposable
             }
             catch { return _api; }
 
+            bool sawDxvk = false, sawVkd3d = false, sawVulkan = false, sawGl = false;
             foreach (var pid in pids)
             {
                 var mapsPath = "/proc/" + pid + "/maps";
                 if (!File.Exists(mapsPath)) continue;
 
-                string api = "-";
                 try
                 {
                     using var sr = new StreamReader(mapsPath, Encoding.ASCII, false, 1 << 16);
@@ -266,23 +266,24 @@ public sealed class GameTelemetry : IDisposable
                     {
                         if (!hasMangoHud && line.Contains("MangoHud", StringComparison.OrdinalIgnoreCase))
                             hasMangoHud = true;
-                        if (api == "-")
-                        {
-                            if (line.Contains("dxvk", StringComparison.OrdinalIgnoreCase)) api = "DX9/10/11 (DXVK)";
-                            else if (line.Contains("vkd3d", StringComparison.OrdinalIgnoreCase)) api = "D3D12 (VKD3D)";
-                            else if (line.Contains("libvulkan", StringComparison.OrdinalIgnoreCase)) api = "Vulkan";
-                            else if (line.Contains("libGL.", StringComparison.OrdinalIgnoreCase)) api = "OpenGL";
-                        }
-                        if (hasMangoHud && api != "-") break;
-                    }
-                    if (hasMangoHud && api != "-")
-                    {
-                        _logger.LogInformation("Game API resolved via /proc: {Api} (pid {Pid})", api, pid);
-                        return api;
+                        if (!hasMangoHud) continue;
+                        if (line.Contains("vkd3d", StringComparison.OrdinalIgnoreCase)) sawVkd3d = true;
+                        else if (line.Contains("dxvk", StringComparison.OrdinalIgnoreCase)) sawDxvk = true;
+                        else if (line.Contains("libvulkan", StringComparison.OrdinalIgnoreCase)) sawVulkan = true;
+                        else if (line.Contains("libGL.", StringComparison.OrdinalIgnoreCase)) sawGl = true;
                     }
                 }
                 catch { }
             }
+
+            string api = sawVkd3d ? "D3D12 (VKD3D)"
+                : sawDxvk ? "DX9/10/11 (DXVK)"
+                : sawVulkan ? "Vulkan"
+                : sawGl ? "OpenGL"
+                : "-";
+            if (api != "-")
+                _logger.LogInformation("Game API resolved via /proc: {Api} (vkd3d={V} dxvk={D} vulkan={U} gl={G})", api, sawVkd3d, sawDxvk, sawVulkan, sawGl);
+            return api;
         }
         catch (Exception ex)
         {

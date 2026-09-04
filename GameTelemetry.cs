@@ -17,6 +17,17 @@ public sealed class GameTelemetry : IDisposable
     private readonly ILogger _logger;
     private readonly string _logDir;
 
+    private static readonly string[] HomeGameDirs = Directory.Exists("/home")
+        ? Array.ConvertAll(Directory.GetDirectories("/home"), h => Path.Combine(h, ".local", "share", "TuringMonitor", "game"))
+        : Array.Empty<string>();
+
+    private IEnumerable<string> CandidateDirs()
+    {
+        yield return _logDir;
+        foreach (var d in HomeGameDirs)
+            yield return d;
+    }
+
     private string? _activeFile;
     private long _readOffset;
     private long _lastGrowthUtcTicks;
@@ -53,9 +64,10 @@ public sealed class GameTelemetry : IDisposable
         {
             string? newest = null;
             DateTime newestWrite = DateTime.MinValue;
-            if (Directory.Exists(_logDir))
+            foreach (var dir in CandidateDirs())
             {
-                foreach (var path in Directory.EnumerateFiles(_logDir, "*.csv"))
+                if (!Directory.Exists(dir)) continue;
+                foreach (var path in Directory.EnumerateFiles(dir, "*.csv"))
                 {
                     var write = File.GetLastWriteTimeUtc(path);
                     if (write > newestWrite)
@@ -129,6 +141,8 @@ public sealed class GameTelemetry : IDisposable
             }
         }
         _activeGameName = name;
+        if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            _activeGameName = name[..^4];
     }
 
     private void ReadNewBytes(string file)
@@ -227,17 +241,25 @@ public sealed class GameTelemetry : IDisposable
             if (DateTime.UtcNow - _lastProcScan < ProcScanInterval) return _api;
             _lastProcScan = DateTime.UtcNow;
 
-            foreach (var dir in Directory.EnumerateDirectories("/proc"))
+            string[] pids;
+            try
             {
-                var name = Path.GetFileName(dir.AsSpan());
-                if (name.IsEmpty || !char.IsDigit(name[0])) continue;
+                pids = Directory.GetDirectories("/proc")
+                    .Select(Path.GetFileName)
+                    .Where(n => n.Length > 0 && char.IsDigit(n[0]))
+                    .ToArray();
+            }
+            catch { return _api; }
 
-                var mapsPath = Path.Combine(dir, "maps");
+            foreach (var pid in pids)
+            {
+                var mapsPath = "/proc/" + pid + "/maps";
                 if (!File.Exists(mapsPath)) continue;
 
                 string api = "-";
-                using (var sr = new StreamReader(mapsPath, Encoding.ASCII, false, 1 << 16))
+                try
                 {
+                    using var sr = new StreamReader(mapsPath, Encoding.ASCII, false, 1 << 16);
                     bool hasMangoHud = false;
                     string? line;
                     while ((line = sr.ReadLine()) != null)
@@ -255,10 +277,11 @@ public sealed class GameTelemetry : IDisposable
                     }
                     if (hasMangoHud && api != "-")
                     {
-                        _logger.LogInformation("Game API resolved via /proc: {Api} (pid {Pid})", api, name.ToString());
+                        _logger.LogInformation("Game API resolved via /proc: {Api} (pid {Pid})", api, pid);
                         return api;
                     }
                 }
+                catch { }
             }
         }
         catch (Exception ex)

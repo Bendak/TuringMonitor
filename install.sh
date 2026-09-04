@@ -46,15 +46,30 @@ sudo mkdir -p /var/lib/turing-monitor/game
 sudo chmod 1777 /var/lib/turing-monitor/game
 
 # MangoHud profile for game telemetry — installed once, never overwritten
-# (users may have customized it). The file lives in /etc so the launch option
-#   MANGOHUD_CONFIGFILE=/etc/TuringMonitor/turingmonitor.conf mangohud %command%
-# works for every user on the machine.
+# (users may have customized it). TWO copies:
+#   /etc/...            — non-sandboxed launches (native games, Lutris)
+#   $HOME/.config/...   — Steam games: the pressure-vessel sandbox hides host
+#                         /etc and /var from the game; $HOME is the only shared
+#                         path, so the config and the CSV folder MUST live there.
+TARGET_USER="${SUDO_USER:-$USER}"
+USER_CONF_DIR="$(getent passwd "$TARGET_USER" | cut -d: -f6)/.config/MangoHud"
+USER_GAME_DIR="$(getent passwd "$TARGET_USER" | cut -d: -f6)/.local/share/TuringMonitor/game"
+sudo -u "$TARGET_USER" mkdir -p "$USER_CONF_DIR" "$USER_GAME_DIR"
+
 if [ ! -f "$CONFIG_DIR/turingmonitor.conf" ]; then
     echo "📝 Installing MangoHud game telemetry profile to $CONFIG_DIR/turingmonitor.conf"
     sudo cp Assets/MangoHud/turingmonitor.conf "$CONFIG_DIR/turingmonitor.conf"
     sudo chmod 644 "$CONFIG_DIR/turingmonitor.conf"
 else
     echo "ℹ️  MangoHud profile already exists at $CONFIG_DIR/turingmonitor.conf (kept)"
+fi
+
+if [ ! -f "$USER_CONF_DIR/turingmonitor.conf" ]; then
+    echo "📝 Installing MangoHud game telemetry profile to $USER_CONF_DIR/turingmonitor.conf"
+    sudo -u "$TARGET_USER" cp Assets/MangoHud/turingmonitor.conf "$USER_CONF_DIR/turingmonitor.conf"
+    echo "🚀 Steam launch option: MANGOHUD_CONFIGFILE=\$HOME/.config/MangoHud/turingmonitor.conf mangohud %command%"
+else
+    echo "ℹ️  MangoHud profile already exists at $USER_CONF_DIR/turingmonitor.conf (kept)"
 fi
 
 # Stop service if exists and is running

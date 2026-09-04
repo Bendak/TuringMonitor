@@ -64,6 +64,8 @@ public sealed class GameTelemetry : IDisposable
         {
             string? newest = null;
             DateTime newestWrite = DateTime.MinValue;
+            var stale = new List<string>();
+            var cutoff = DateTime.UtcNow - PollStaleAfter;
             foreach (var dir in CandidateDirs())
             {
                 if (!Directory.Exists(dir)) continue;
@@ -75,7 +77,17 @@ public sealed class GameTelemetry : IDisposable
                         newestWrite = write;
                         newest = path;
                     }
+                    if (write < cutoff) stale.Add(path);
                 }
+            }
+
+            // Sweep: sessions that stopped growing (game closed/crashed) get their
+            // CSV deleted so the folder never inflates. A live session writes every
+            // second and is always fresh, so it is never swept.
+            foreach (var f in stale)
+            {
+                try { File.Delete(f); _logger.LogInformation("Removed stale session CSV: {File}", Path.GetFileName(f)); }
+                catch (Exception ex) { _logger.LogDebug(ex, "Failed to delete stale CSV {File}", f); }
             }
 
             if (newest == null || DateTime.UtcNow - newestWrite > PollStaleAfter)
@@ -261,20 +273,22 @@ public sealed class GameTelemetry : IDisposable
                 {
                     using var sr = new StreamReader(mapsPath, Encoding.ASCII, false, 1 << 16);
                     bool hasMangoHud = false;
+                    bool pVk = false, pDx = false, pVu = false, pGl = false;
                     string? line;
                     while ((line = sr.ReadLine()) != null)
                     {
                         if (!hasMangoHud && line.Contains("MangoHud", StringComparison.OrdinalIgnoreCase))
                             hasMangoHud = true;
-                        if (line.Contains("vkd3d", StringComparison.OrdinalIgnoreCase)) sawVkd3d = true;
-                        else if (line.Contains("dxvk", StringComparison.OrdinalIgnoreCase)) sawDxvk = true;
-                        else if (line.Contains("libvulkan", StringComparison.OrdinalIgnoreCase)) sawVulkan = true;
-                        else if (line.Contains("libGL.", StringComparison.OrdinalIgnoreCase)) sawGl = true;
+                        if (line.Contains("vkd3d", StringComparison.OrdinalIgnoreCase)) pVk = true;
+                        else if (line.Contains("dxvk", StringComparison.OrdinalIgnoreCase)) pDx = true;
+                        else if (line.Contains("libvulkan", StringComparison.OrdinalIgnoreCase)) pVu = true;
+                        else if (line.Contains("libGL.", StringComparison.OrdinalIgnoreCase)) pGl = true;
                     }
-                    if (!hasMangoHud)
-                    {
-                        sawVkd3d = sawDxvk = sawVulkan = sawGl = false;
-                    }
+                    if (!hasMangoHud) continue;
+                    sawVkd3d |= pVk;
+                    sawDxvk |= pDx;
+                    sawVulkan |= pVu;
+                    sawGl |= pGl;
                 }
                 catch { }
             }

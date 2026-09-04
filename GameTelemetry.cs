@@ -119,7 +119,7 @@ public sealed class GameTelemetry : IDisposable
         var name = Path.GetFileNameWithoutExtension(file);
         for (int i = 0; i + 5 < name.Length; i++)
         {
-            if (name[i] == '-' &&
+            if (name[i] == '_' &&
                 char.IsDigit(name[i + 1]) && char.IsDigit(name[i + 2]) &&
                 char.IsDigit(name[i + 3]) && char.IsDigit(name[i + 4]) &&
                 name[i + 5] == '-')
@@ -160,13 +160,13 @@ public sealed class GameTelemetry : IDisposable
 
         if (_columnMap.Length == 0)
         {
-            BuildColumnMap();
+            if (_cols.Contains("fps"))
+                BuildColumnMap();
             return;
         }
 
         int fpsIdx = _columnMap[0];
         int ftIdx = _columnMap[1];
-        int apiIdx = _columnMap[2];
 
         if (fpsIdx >= 0 && fpsIdx < _cols.Count &&
             float.TryParse(_cols[fpsIdx], NumberStyles.Float, CultureInfo.InvariantCulture, out var fps))
@@ -174,8 +174,6 @@ public sealed class GameTelemetry : IDisposable
         if (ftIdx >= 0 && ftIdx < _cols.Count &&
             float.TryParse(_cols[ftIdx], NumberStyles.Float, CultureInfo.InvariantCulture, out var ft))
             _frametimeMs = ft;
-        if (apiIdx >= 0 && apiIdx < _cols.Count && !string.IsNullOrWhiteSpace(_cols[apiIdx]))
-            _api = _cols[apiIdx];
     }
 
     private void BuildColumnMap()
@@ -183,9 +181,8 @@ public sealed class GameTelemetry : IDisposable
         _headerNames = _cols.ToArray();
         int fps = IndexOfHeader("fps");
         int ft = IndexOfHeader("frametime");
-        int api = IndexOfHeader("api");
-        _columnMap = new[] { fps, ft, api };
-        _logger.LogInformation("MangoHud CSV columns: fps={Fps} frametime={Ft} api={Api}", fps, ft, api);
+        _columnMap = new[] { fps, ft };
+        _logger.LogInformation("MangoHud CSV columns: fps={Fps} frametime={Ft}", fps, ft);
     }
 
     private int IndexOfHeader(string name)

@@ -87,6 +87,48 @@ Recomendado colocar em `appsettings.local.json` (gitignored).
 - "Falhou após N tentativas": `Warning`.
 - Sucesso: `Information` com temp/ícone.
 
+## Game Stats (telemetria de jogo via MangoHud) — leia com atenção
+
+Nova fonte de telemetria (set/26, branch `feature/game-stats`): FPS, frametime,
+nome do jogo e API gráfica (Vulkan/OpenGL/DXVK/VKD3D).
+
+### Como funciona
+- O jogo precisa ser lançado com o perfil dedicado do MangoHud (launch option do Steam):
+  `MANGOHUD_CONFIGFILE=/etc/TuringMonitor/turingmonitor.conf mangohud %command%`
+- O perfil é invisível via `alpha=0.0` + `background_alpha=0.0` (HUD renderiza 100%
+  transparente) e só loga CSV: 1 arquivo por sessão em
+  `/var/lib/turing-monitor/game/`, nome `NomeDoJogo_YYYY-MM-DD_HH-MM-SS.csv` (underscore!), 1 linha/seg.
+- ⚠️ `no_display` NÃO serve: na 0.8.4 o autostart do log roda no caminho de update
+  do HUD — HUD oculto = CSV nunca nasce (validado no hardware; `preset=0` idem).
+- O MangoHud **precisa ser injetado no nascimento do processo** (hook Vulkan/OpenGL) —
+  não existe modo "aguardar jogo" com instância solta em background.
+- `GameTelemetry.cs` faz tail incremental do CSV mais recente: o CSV real da 0.8.4
+  tem header em DOIS blocos (linha 1: `os,cpu,...` / linha 2: valores do sistema /
+  linha 3: header de métricas `fps,frametime,...`) — o column map é construído na
+  linha que contém `fps`, não na primeira. NÃO existe coluna `api` no CSV; a API
+  gráfica vem SEMPRE do fallback /proc (dxvk→"DX9/10/11 (DXVK)", vkd3d→"D3D12
+  (VKD3D)", libvulkan→"Vulkan", libGL→"OpenGL").
+- Sessão morta: arquivo parou de crescer por 10s (`PollStaleAfter`) → reset
+  (Name="-", Fps=0). Arquivos antigos na pasta não são re-adotados (janela de
+  frescor pelo mtime).
+- API gráfica: sempre via `/proc/<pid>/maps` — identifica o processo com libs
+  MangoHud mapeadas e classifica (dxvk→"DX9/10/11 (DXVK)", vkd3d→"D3D12 (VKD3D)",
+  libvulkan→"Vulkan", libGL→"OpenGL").
+
+### Caminhos de deploy (install.sh)
+- `/etc/TuringMonitor/turingmonitor.conf`: perfil MangoHud (instalado só se não
+  existir — nunca clobbera customização).
+- `/var/lib/turing-monitor/game/`: pasta sticky 1777 — jogo roda como usuário
+  desktop, daemon roda como root; sticky permite ambos sem conflito de dono.
+- Config de runtime: `appsettings.json:GameLogDir` sobrescreve a pasta default.
+- Theme sources novos: `GameName`, `GameFps`, `GameFrametime`, `GameApi`
+  (thresholds de redraw em `Worker.HasChanged`).
+
+### Validação pendente
+- Header real do CSV do MangoHud 0.8.4 (nomes das colunas podem diferir do
+  sintético usado no harness de teste — o parse é dinâmico por nome, então
+  diferença de posição não quebra; conferir com jogo real).
+
 ## Configuração e arquivos de estado
 
 - `appsettings.json` / `appsettings.Development.json` / `appsettings.local.json` (gitignored): config de runtime.
@@ -103,6 +145,9 @@ Recomendado colocar em `appsettings.local.json` (gitignored).
 - Mantenha o estilo existente (espaçamento, nomeação, estrutura de arquivos por responsabilidade).
 
 ## Armadilhas conhecidas
+
+- **`autostart_log=0` NÃO significa "imediatamente" — desativa o log** (checado `if (params->autostart_log && ...)` no overlay.cpp: 0 é falsy). Use `autostart_log=1` (log começa 1s após o init).
+- **`MANGOHUD_CONFIGFILE` com valor inválido/inexistente**: o MangoHud silenciosamente continua com o config do usuário (`~/.config/MangoHud/MangoHud.conf`) — HUD visível e sem CSV. Se o HUD aparecer em jogo monitorado, a env var não chegou no processo (launch option errada no Steam).
 
 - **Não mude o cache para horário fixo** sem discutir — veja "Agendamento e retry" acima.
 - `nvidia-smi` é chamado por processo externo com timeout de 5s; se falhar, retorna `(0,0,0,0,0)` — não derruba o serviço.

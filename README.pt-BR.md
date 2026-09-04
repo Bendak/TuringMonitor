@@ -95,6 +95,37 @@ Os temas ficam em `Assets/Themes/`.
 - `NetInMbps`, `NetOutMbps`, `NetInString`, `NetOutString`
 - `WeatherTemp`, `WeatherIcon`
 - `DateTime`
+- `GameName`, `GameFps`, `GameFrametime`, `GameApi` (veja [Game Stats](#-game-stats) abaixo)
+
+### 🎮 Game Stats
+
+Telemetria de jogo ao vivo — título, FPS, frametime e API gráfica (Vulkan,
+OpenGL, D3D9/10/11 via DXVK, D3D12 via VKD3D) — via
+[MangoHud](https://github.com/flightlessmango/MangoHud). Detalhes completos em
+[README-games.md](README-games.md).
+
+> [!IMPORTANT]
+> A telemetria de jogo **não é plug & play**: o MangoHud precisa ser injetado
+> no nascimento do processo, então é preciso adicionar uma launch option **em
+> cada jogo** que você quer no display. Após o `install.sh`, o perfil fica em
+> `~/.config/MangoHud/turingmonitor.conf` (também em `/etc/TuringMonitor/` para
+> jogos fora do sandbox do Steam).
+>
+> **Launch options do Steam:**
+>
+> ```
+> MANGOHUD_CONFIGFILE=$HOME/.config/MangoHud/turingmonitor.conf mangohud %command%
+> ```
+>
+> Observações:
+> - O perfil renderiza o HUD 100% transparente (`alpha=0.0`) — nada aparece na
+>   tela do jogo. **Não** use `no_display`: no MangoHud 0.8.4 ele também mata o
+>   autostart do log CSV.
+> - Jogos do Steam rodam dentro do sandbox pressure-vessel, que não compartilha
+>   o `/etc` e `/var` do host com o jogo — por isso o perfil e a pasta de CSV
+>   precisam ficar sob o `$HOME` (único caminho compartilhado).
+> - Os CSVs de sessão são apagados automaticamente quando o jogo fecha, então a
+>   pasta nunca enche.
 
 ### Provedores de Clima
 

@@ -182,6 +182,30 @@
       "FontSize": 14
     },
     {
+      "Id": "game_fps",
+      "Type": "Text",
+      "Source": "GameFps",
+      "Format": "{0:0}",
+      "X": 340,
+      "Y": 148,
+      "Width": 138,
+      "Height": 38,
+      "Color": "#ffaa00",
+      "FontSize": 38
+    },
+    {
+      "Id": "game_api",
+      "Type": "Text",
+      "Source": "GameApi",
+      "Format": "{0}",
+      "X": 288,
+      "Y": 188,
+      "Width": 160,
+      "Height": 16,
+      "Color": "#ffccaa",
+      "FontSize": 12
+    },
+    {
       "Id": "net_name",
       "Type": "Text",
       "Source": "Rede",
@@ -222,9 +246,9 @@
       "Type": "Icon",
       "Source": "WeatherIcon",
       "X": 370,
-      "Y": 228,
-      "Width": 72,
-      "Height": 72
+      "Y": 236,
+      "Width": 64,
+      "Height": 64
     },
     {
       "Id": "weather_temp",
@@ -232,9 +256,9 @@
       "Source": "WeatherTemp",
       "Format": "{0:0}°C",
       "X": 370,
-      "Y": 284,
-      "Width": 72,
-      "Height": 18,
+      "Y": 294,
+      "Width": 64,
+      "Height": 20,
       "Color": "#ffffff",
       "FontSize": 16,
       "Alignment": "Center"

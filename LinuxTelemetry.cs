@@ -79,6 +79,8 @@ public class LinuxTelemetry : ITelemetry
     private DateTime _lastGpuStatsTime = DateTime.MinValue;
     private (float Load, float Temp, float Power, float VramUsed, float VramTotal) _lastGpuStats;
 
+    private readonly GameTelemetry _game;
+
     public string CpuName { get; private set; } = "Unknown CPU";
     public string GpuName { get; private set; } = "Unknown GPU";
     public string GpuModel { get; private set; } = "Unknown GPU";
@@ -97,6 +99,7 @@ public class LinuxTelemetry : ITelemetry
         GpuName = GetGpuFullName();
         GpuModel = GetGpuShortName(GpuName);
 
+        _game = new GameTelemetry(logger, options?.Value.GameLogDir);
         LoadPersistedWeather();
     }
 
@@ -609,4 +612,6 @@ public class LinuxTelemetry : ITelemetry
         }
         catch (Exception ex) { _logger.LogWarning(ex, "GetCpuTemp failed"); return 0; }
     }
+
+    public GameTelemetry.GameStats GetGameStats() => _game.Get();
 }

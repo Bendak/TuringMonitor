@@ -14,4 +14,5 @@ public interface ITelemetry
     (float Load, float Temp, float Power, float VramUsed, float VramTotal) GetGpuStats();
     (float InMbps, float OutMbps) GetNetStats();
     Task<WeatherStats> GetWeatherAsync(double lat, double lon);
+    GameTelemetry.GameStats GetGameStats();
 }

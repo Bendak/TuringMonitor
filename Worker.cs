@@ -38,6 +38,10 @@ public record TelemetrySnapshot(
     string NetOutString,
     float WeatherTemp,
     string WeatherIcon,
+    string GameName,
+    float GameFps,
+    float GameFrametime,
+    string GameApi,
     DateTime Timestamp
 );
 
@@ -104,6 +108,7 @@ public class Worker : BackgroundService
                 double lat = _layout.Theme?.Latitude ?? 0;
                 double lon = _layout.Theme?.Longitude ?? 0;
                 var weather = await _telemetry.GetWeatherAsync(lat, lon);
+                var game = _telemetry.GetGameStats();
 
                 var snapshot = new TelemetrySnapshot(
                     _telemetry.CpuName,
@@ -126,6 +131,10 @@ public class Worker : BackgroundService
                     FormatRate(net.OutMbps),
                     weather.Temp,
                     weather.IconId,
+                    game.Name,
+                    game.Fps,
+                    game.FrametimeMs,
+                    game.Api,
                     DateTime.Now
                 );
 
@@ -220,6 +229,10 @@ public class Worker : BackgroundService
                         "NetOutString" => snapshot.NetOutString,
                         "WeatherTemp" => snapshot.WeatherTemp,
                         "WeatherIcon" => snapshot.WeatherIcon,
+                        "GameName" => snapshot.GameName,
+                        "GameFps" => snapshot.GameFps,
+                        "GameFrametime" => snapshot.GameFrametime,
+                        "GameApi" => snapshot.GameApi,
                         "DateTime" => snapshot.Timestamp,
                         _ => null
                     };
@@ -283,6 +296,10 @@ public class Worker : BackgroundService
             "NetInMbps" => Math.Abs(current.NetInMbps - last.NetInMbps) > 1.0f,
             "NetOutMbps" => Math.Abs(current.NetOutMbps - last.NetOutMbps) > 1.0f,
             "WeatherTemp" => Math.Abs(current.WeatherTemp - last.WeatherTemp) > 0.5f,
+            "GameFps" => Math.Abs(current.GameFps - last.GameFps) > 0.5f,
+            "GameFrametime" => Math.Abs(current.GameFrametime - last.GameFrametime) > 0.1f,
+            "GameName" => current.GameName != last.GameName,
+            "GameApi" => current.GameApi != last.GameApi,
             "CpuName" => current.CpuName != last.CpuName,
             "GpuModel" => current.GpuModel != last.GpuModel,
             "RamString" => current.RamString != last.RamString,

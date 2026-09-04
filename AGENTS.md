@@ -140,6 +140,9 @@ nome do jogo e API gráfica (Vulkan/OpenGL/DXVK/VKD3D).
 
 ## Armadilhas conhecidas
 
+- **`autostart_log=0` NÃO significa "imediatamente" — desativa o log** (checado `if (params->autostart_log && ...)` no overlay.cpp: 0 é falsy). Use `autostart_log=1` (log começa 1s após o init).
+- **`MANGOHUD_CONFIGFILE` com valor inválido/inexistente**: o MangoHud silenciosamente continua com o config do usuário (`~/.config/MangoHud/MangoHud.conf`) — HUD visível e sem CSV. Se o HUD aparecer em jogo monitorado, a env var não chegou no processo (launch option errada no Steam).
+
 - **Não mude o cache para horário fixo** sem discutir — veja "Agendamento e retry" acima.
 - `nvidia-smi` é chamado por processo externo com timeout de 5s; se falhar, retorna `(0,0,0,0,0)` — não derruba o serviço.
 - O `Channel<TelemetrySnapshot>` é bounded(1) com `DropOldest` — snapshots antigos são descartados se o consumer estiver lento. Não aumente o bound sem motivo (pode atrasar telemetria).

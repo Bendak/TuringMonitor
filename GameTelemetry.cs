@@ -257,7 +257,7 @@ public sealed class GameTelemetry : IDisposable
             try
             {
                 pids = Directory.GetDirectories("/proc")
-                    .Select(Path.GetFileName)
+                    .Select(d => Path.GetFileName(d) ?? "")
                     .Where(n => n.Length > 0 && char.IsDigit(n[0]))
                     .ToArray();
             }

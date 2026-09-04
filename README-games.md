@@ -15,8 +15,10 @@ from [MangoHud](https://github.com/flightlessmango/Mangohud).
 4. When no CSV has grown recently, the session is treated as over and the
    telemetry reports idle values (`-`, 0 fps).
 
-The HUD itself is invisible in the game (`no_display`) — the LCD panel is the
-only surface showing the data.
+The HUD itself is invisible in the game: it renders fully transparent
+(`alpha=0.0` + `background_alpha=0.0`) — the LCD panel is the only surface
+showing the data. (Do NOT use `no_display`: in MangoHud 0.8.4 it also kills the
+CSV autostart, because the autostart check runs on the HUD update path.)
 
 ### Setup (once, after running install.sh)
 

@@ -95,19 +95,25 @@ nome do jogo e API gráfica (Vulkan/OpenGL/DXVK/VKD3D).
 ### Como funciona
 - O jogo precisa ser lançado com o perfil dedicado do MangoHud (launch option do Steam):
   `MANGOHUD_CONFIGFILE=/etc/TuringMonitor/turingmonitor.conf mangohud %command%`
-- O perfil é invisível (`no_display`) e só loga CSV: 1 arquivo por sessão em
-  `/var/lib/turing-monitor/game/`, nome `NomeDoJogo-<timestamp>.csv`, 1 linha/seg.
+- O perfil é invisível via `alpha=0.0` + `background_alpha=0.0` (HUD renderiza 100%
+  transparente) e só loga CSV: 1 arquivo por sessão em
+  `/var/lib/turing-monitor/game/`, nome `NomeDoJogo_YYYY-MM-DD_HH-MM-SS.csv` (underscore!), 1 linha/seg.
+- ⚠️ `no_display` NÃO serve: na 0.8.4 o autostart do log roda no caminho de update
+  do HUD — HUD oculto = CSV nunca nasce (validado no hardware; `preset=0` idem).
 - O MangoHud **precisa ser injetado no nascimento do processo** (hook Vulkan/OpenGL) —
   não existe modo "aguardar jogo" com instância solta em background.
-- `GameTelemetry.cs` faz tail incremental do CSV mais recente: parse dinâmico do
-  header (colunas por nome, sobrevive a mudança de versão/config do MangoHud),
-  nome do jogo extraído do nome do arquivo (strip do sufixo `-YYYY-MM-DDTHH-MM-SS`).
+- `GameTelemetry.cs` faz tail incremental do CSV mais recente: o CSV real da 0.8.4
+  tem header em DOIS blocos (linha 1: `os,cpu,...` / linha 2: valores do sistema /
+  linha 3: header de métricas `fps,frametime,...`) — o column map é construído na
+  linha que contém `fps`, não na primeira. NÃO existe coluna `api` no CSV; a API
+  gráfica vem SEMPRE do fallback /proc (dxvk→"DX9/10/11 (DXVK)", vkd3d→"D3D12
+  (VKD3D)", libvulkan→"Vulkan", libGL→"OpenGL").
 - Sessão morta: arquivo parou de crescer por 10s (`PollStaleAfter`) → reset
   (Name="-", Fps=0). Arquivos antigos na pasta não são re-adotados (janela de
   frescor pelo mtime).
-- API gráfica: coluna `api` do CSV quando existir; fallback via `/proc/<pid>/maps`
-  — identifica o processo com libs MangoHud mapeadas e classifica
-  (dxvk→"DX9/10/11 (DXVK)", vkd3d→"D3D12 (VKD3D)", libvulkan→"Vulkan", libGL→"OpenGL").
+- API gráfica: sempre via `/proc/<pid>/maps` — identifica o processo com libs
+  MangoHud mapeadas e classifica (dxvk→"DX9/10/11 (DXVK)", vkd3d→"D3D12 (VKD3D)",
+  libvulkan→"Vulkan", libGL→"OpenGL").
 
 ### Caminhos de deploy (install.sh)
 - `/etc/TuringMonitor/turingmonitor.conf`: perfil MangoHud (instalado só se não

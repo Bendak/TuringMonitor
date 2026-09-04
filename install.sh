@@ -40,6 +40,23 @@ sudo mkdir -p "$ASSETS_DIR"
 sudo mkdir -p /var/lib/turing-monitor
 sudo chmod 755 /var/lib/turing-monitor
 
+# Game telemetry: shared CSV log folder (sticky so any user can write sessions,
+# e.g. games launched from Steam by any desktop user)
+sudo mkdir -p /var/lib/turing-monitor/game
+sudo chmod 1777 /var/lib/turing-monitor/game
+
+# MangoHud profile for game telemetry — installed once, never overwritten
+# (users may have customized it). The file lives in /etc so the launch option
+#   MANGOHUD_CONFIGFILE=/etc/TuringMonitor/turingmonitor.conf mangohud %command%
+# works for every user on the machine.
+if [ ! -f "$CONFIG_DIR/turingmonitor.conf" ]; then
+    echo "📝 Installing MangoHud game telemetry profile to $CONFIG_DIR/turingmonitor.conf"
+    sudo cp Assets/MangoHud/turingmonitor.conf "$CONFIG_DIR/turingmonitor.conf"
+    sudo chmod 644 "$CONFIG_DIR/turingmonitor.conf"
+else
+    echo "ℹ️  MangoHud profile already exists at $CONFIG_DIR/turingmonitor.conf (kept)"
+fi
+
 # Stop service if exists and is running
 if systemctl is-active --quiet turing-monitor.service; then
     echo "🛑 Stopping existing service for update..."

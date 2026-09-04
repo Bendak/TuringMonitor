@@ -87,6 +87,42 @@ Recomendado colocar em `appsettings.local.json` (gitignored).
 - "Falhou após N tentativas": `Warning`.
 - Sucesso: `Information` com temp/ícone.
 
+## Game Stats (telemetria de jogo via MangoHud) — leia com atenção
+
+Nova fonte de telemetria (set/26, branch `feature/game-stats`): FPS, frametime,
+nome do jogo e API gráfica (Vulkan/OpenGL/DXVK/VKD3D).
+
+### Como funciona
+- O jogo precisa ser lançado com o perfil dedicado do MangoHud (launch option do Steam):
+  `MANGOHUD_CONFIGFILE=/etc/TuringMonitor/turingmonitor.conf mangohud %command%`
+- O perfil é invisível (`no_display`) e só loga CSV: 1 arquivo por sessão em
+  `/var/lib/turing-monitor/game/`, nome `NomeDoJogo-<timestamp>.csv`, 1 linha/seg.
+- O MangoHud **precisa ser injetado no nascimento do processo** (hook Vulkan/OpenGL) —
+  não existe modo "aguardar jogo" com instância solta em background.
+- `GameTelemetry.cs` faz tail incremental do CSV mais recente: parse dinâmico do
+  header (colunas por nome, sobrevive a mudança de versão/config do MangoHud),
+  nome do jogo extraído do nome do arquivo (strip do sufixo `-YYYY-MM-DDTHH-MM-SS`).
+- Sessão morta: arquivo parou de crescer por 10s (`PollStaleAfter`) → reset
+  (Name="-", Fps=0). Arquivos antigos na pasta não são re-adotados (janela de
+  frescor pelo mtime).
+- API gráfica: coluna `api` do CSV quando existir; fallback via `/proc/<pid>/maps`
+  — identifica o processo com libs MangoHud mapeadas e classifica
+  (dxvk→"DX9/10/11 (DXVK)", vkd3d→"D3D12 (VKD3D)", libvulkan→"Vulkan", libGL→"OpenGL").
+
+### Caminhos de deploy (install.sh)
+- `/etc/TuringMonitor/turingmonitor.conf`: perfil MangoHud (instalado só se não
+  existir — nunca clobbera customização).
+- `/var/lib/turing-monitor/game/`: pasta sticky 1777 — jogo roda como usuário
+  desktop, daemon roda como root; sticky permite ambos sem conflito de dono.
+- Config de runtime: `appsettings.json:GameLogDir` sobrescreve a pasta default.
+- Theme sources novos: `GameName`, `GameFps`, `GameFrametime`, `GameApi`
+  (thresholds de redraw em `Worker.HasChanged`).
+
+### Validação pendente
+- Header real do CSV do MangoHud 0.8.4 (nomes das colunas podem diferir do
+  sintético usado no harness de teste — o parse é dinâmico por nome, então
+  diferença de posição não quebra; conferir com jogo real).
+
 ## Configuração e arquivos de estado
 
 - `appsettings.json` / `appsettings.Development.json` / `appsettings.local.json` (gitignored): config de runtime.

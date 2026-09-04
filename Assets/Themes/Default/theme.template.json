@@ -273,6 +273,54 @@
       "Height": 14,
       "Color": "#ffffff",
       "FontSize": 12
+    },
+    {
+      "Id": "game_name",
+      "Type": "Text",
+      "Source": "GameName",
+      "Format": "{0}",
+      "X": 14,
+      "Y": 240,
+      "Width": 160,
+      "Height": 20,
+      "Color": "#39f900",
+      "FontSize": 14
+    },
+    {
+      "Id": "game_fps",
+      "Type": "Text",
+      "Source": "GameFps",
+      "Format": "{0:0} fps",
+      "X": 14,
+      "Y": 258,
+      "Width": 90,
+      "Height": 20,
+      "Color": "#39f900",
+      "FontSize": 16
+    },
+    {
+      "Id": "game_frametime",
+      "Type": "Text",
+      "Source": "GameFrametime",
+      "Format": "{0:F1} ms",
+      "X": 100,
+      "Y": 258,
+      "Width": 70,
+      "Height": 20,
+      "Color": "#39f900",
+      "FontSize": 14
+    },
+    {
+      "Id": "game_api",
+      "Type": "Text",
+      "Source": "GameApi",
+      "Format": "{0}",
+      "X": 14,
+      "Y": 278,
+      "Width": 160,
+      "Height": 20,
+      "Color": "#39f900",
+      "FontSize": 12
     }
   ]
 }

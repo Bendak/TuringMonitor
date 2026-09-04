@@ -97,6 +97,37 @@ Themes are located in `Assets/Themes/`.
 - `NetInMbps`, `NetOutMbps`, `NetInString`, `NetOutString`
 - `WeatherTemp`, `WeatherIcon`
 - `DateTime`
+- `GameName`, `GameFps`, `GameFrametime`, `GameApi` (see [Game Stats](#-game-stats) below)
+
+### 🎮 Game Stats
+
+Live game telemetry — title, FPS, frametime and graphics API (Vulkan, OpenGL,
+D3D9/10/11 via DXVK, D3D12 via VKD3D) — sourced from
+[MangoHud](https://github.com/flightlessmango/MangoHud). See
+[README-games.md](README-games.md) for the full details.
+
+> [!IMPORTANT]
+> Game telemetry is **not plug & play**: MangoHud must be injected at process
+> start, so you must add a launch option **to each game** you want on the
+> display. After `install.sh`, the profile is at
+> `~/.config/MangoHud/turingmonitor.conf` (also `/etc/TuringMonitor/` for
+> non-sandboxed launches).
+>
+> **Steam launch options:**
+>
+> ```
+> MANGOHUD_CONFIGFILE=$HOME/.config/MangoHud/turingmonitor.conf mangohud %command%
+> ```
+>
+> Notes:
+> - The profile renders the HUD fully transparent (`alpha=0.0`) — nothing shows
+>   on the game screen. Do **not** use `no_display`: in MangoHud 0.8.4 it also
+>   kills the CSV logging autostart.
+> - Steam games run inside the pressure-vessel sandbox, which does not share the
+>   host's `/etc` and `/var` with the game — that's why the profile and the CSV
+>   folder must live under `$HOME` (the only shared path).
+> - Session CSVs are deleted automatically when the game exits, so the folder
+>   never fills up.
 
 ### Weather Providers
 

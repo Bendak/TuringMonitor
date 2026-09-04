@@ -182,18 +182,6 @@
       "FontSize": 14
     },
     {
-      "Id": "game_name",
-      "Type": "Text",
-      "Source": "GameName",
-      "Format": "/ {0}",
-      "X": 348,
-      "Y": 188,
-      "Width": 128,
-      "Height": 20,
-      "Color": "#39f900",
-      "FontSize": 12
-    },
-    {
       "Id": "game_fps",
       "Type": "Text",
       "Source": "GameFps",
@@ -212,7 +200,7 @@
       "Format": "{0}",
       "X": 288,
       "Y": 188,
-      "Width": 60,
+      "Width": 160,
       "Height": 16,
       "Color": "#ffccaa",
       "FontSize": 12
